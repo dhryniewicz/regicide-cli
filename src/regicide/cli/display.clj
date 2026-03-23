@@ -187,23 +187,44 @@
      "  A cooperative card game of regicide"
      ""]))
 
+(def ^:private dim "\u001b[2m")
+(def ^:private strikethrough "\u001b[9m")
+
+(def ^:private suit-power-labels
+  {:spades   "Reduce enemy attack"
+   :hearts   "Recycle from discard"
+   :diamonds "Draw cards"
+   :clubs    "Double damage"})
+
+(defn- render-cancelled-powers
+  "Render lines for suit powers that were cancelled by enemy immunity."
+  [immune-suit played-suits]
+  (when (and immune-suit (contains? played-suits immune-suit))
+    [(str "  " dim strikethrough (card/suit-symbols immune-suit) " "
+          (suit-power-labels immune-suit)
+          ansi-reset dim " (immune)" ansi-reset)]))
+
 (defn render-action-result [action-info]
   (when action-info
-    (str/join "\n"
-      (remove nil?
-        [(when-let [cards (:played action-info)]
-           (str "  Played: " (str/join " " (map card/card-label cards))))
-         (when-let [dmg (:damage action-info)]
-           (str "  Damage dealt: " dmg))
-         (when (pos? (or (:attack-reduce action-info) 0))
-           (str "  " (card/suit-symbols :spades) " Reduced enemy attack by " (:attack-reduce action-info)))
-         (when (pos? (or (:hearts-heal action-info) 0))
-           (str "  " (card/suit-symbols :hearts) " Recycled " (:hearts-heal action-info) " cards from discard"))
-         (when (pos? (or (:diamonds-draw action-info) 0))
-           (str "  " (card/suit-symbols :diamonds) " Drew " (:diamonds-draw action-info) " cards"))
-         (when (:enemy-defeated action-info)
-           (if (:exact-kill action-info)
-             "  >> Enemy defeated! (Exact kill - enemy card added to your hand!)"
-             "  >> Enemy defeated!"))
-         (when-let [discarded (:discarded action-info)]
-           (str "  Discarded to absorb damage: " (str/join " " (map card/card-label discarded))))]))))
+    (let [immune (:immune-suit action-info)
+          played-suits (:played-suits action-info)]
+      (str/join "\n"
+        (remove nil?
+          (concat
+            [(when-let [cards (:played action-info)]
+               (str "  Played: " (str/join " " (map card/card-label cards))))
+             (when-let [dmg (:damage action-info)]
+               (str "  Damage dealt: " dmg))
+             (when (pos? (or (:attack-reduce action-info) 0))
+               (str "  " (card/suit-symbols :spades) " Reduced enemy attack by " (:attack-reduce action-info)))
+             (when (pos? (or (:hearts-heal action-info) 0))
+               (str "  " (card/suit-symbols :hearts) " Recycled " (:hearts-heal action-info) " cards from discard"))
+             (when (pos? (or (:diamonds-draw action-info) 0))
+               (str "  " (card/suit-symbols :diamonds) " Drew " (:diamonds-draw action-info) " cards"))]
+            (render-cancelled-powers immune played-suits)
+            [(when (:enemy-defeated action-info)
+               (if (:exact-kill action-info)
+                 "  >> Enemy defeated! (Exact kill - enemy card added to your hand!)"
+                 "  >> Enemy defeated!"))
+             (when-let [discarded (:discarded action-info)]
+               (str "  Discarded to absorb damage: " (str/join " " (map card/card-label discarded))))]))))))

@@ -87,6 +87,8 @@
                     enemy (:current-enemy state)
                     defeated (>= damage (:health enemy))
                     exact (and defeated (= damage (:health enemy)))
+                    immune-suit (get-in state [:current-enemy :card :suit])
+                    played-suits (set (map :suit cards))
                     new-action {:played cards
                                 :damage damage
                                 :attack-reduce (:attack-reduce effects)
@@ -95,7 +97,9 @@
                                 :diamonds-draw (min (:diamonds-draw effects)
                                                     (count (:tavern-deck state)))
                                 :enemy-defeated defeated
-                                :exact-kill exact}]
+                                :exact-kill exact
+                                :immune-suit immune-suit
+                                :played-suits played-suits}]
                 [play-result new-action]))))))))
 
 (defn- discard-phase
