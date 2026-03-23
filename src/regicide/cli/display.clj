@@ -78,11 +78,25 @@
       (map (fn [[_ c]] (str " " (card/card-label c)))
            (sorted-hand-with-indices hand sort-order)))))
 
+(def ^:private yellow "\u001b[33m")
+(def ^:private red "\u001b[31m")
+(def ^:private ansi-reset "\u001b[0m")
+
+(defn- render-phase-banner [phase enemy]
+  (let [attack (:attack enemy)]
+    (case phase
+      :play-cards
+      (str term/bold ">>> ATTACK " ansi-reset "- Select cards to play against the enemy")
+      :suffer-damage
+      (str term/bold red ">>> DEFEND " ansi-reset red
+           "- Discard cards worth at least " attack " to survive" ansi-reset)
+      "")))
+
 (defn render-game-state
   "Render the full game state. When selector-state is provided, shows interactive hand."
   ([state] (render-game-state state nil))
   ([state selector-state]
-   (let [{:keys [tavern-deck discard-pile castle-deck current-enemy sort-order]} state
+   (let [{:keys [tavern-deck discard-pile castle-deck current-enemy sort-order phase]} state
          sort-order (or sort-order :none)
          hand (game/current-hand state)
          enemies-remaining (inc (count castle-deck))
@@ -101,6 +115,8 @@
         (str "  Tavern: " (count tavern-deck) " cards"
              "  |  Discard: " (count discard-pile) " cards"
              "  |  Enemies remaining: " enemies-remaining)
+        ""
+        (render-phase-banner phase current-enemy)
         ""
         (str "Your Hand (" (sort-order-labels sort-order) "):")
         (str "  " hand-display)
