@@ -15,9 +15,14 @@
   (is (= 10 (card/card-value (card/make-card :spades 10)))))
 
 (deftest card-label-test
-  (is (= "A\u2665" (card/card-label (card/make-card :hearts 1))))
-  (is (= "10\u2660" (card/card-label (card/make-card :spades 10))))
-  (is (= "K\u2663" (card/card-label (card/make-card :clubs 13)))))
+  (is (= "\u001b[31mA\u2665\u001b[0m" (card/card-label (card/make-card :hearts 1)))
+      "hearts should be red")
+  (is (= "10\u2660" (card/card-label (card/make-card :spades 10)))
+      "spades should not be colored")
+  (is (= "K\u2663" (card/card-label (card/make-card :clubs 13)))
+      "clubs should not be colored")
+  (is (= "\u001b[31m5\u2666\u001b[0m" (card/card-label (card/make-card :diamonds 5)))
+      "diamonds should be red"))
 
 (deftest predicates-test
   (is (card/player-card? (card/make-card :hearts 10)))

@@ -36,5 +36,11 @@
     13 "K"
     (str rank)))
 
+(def ^:private red "\u001b[31m")
+(def ^:private reset "\u001b[0m")
+
 (defn card-label [card]
-  (str (rank-label (:rank card)) (suit-symbols (:suit card))))
+  (let [text (str (rank-label (:rank card)) (suit-symbols (:suit card)))]
+    (if (#{:hearts :diamonds} (:suit card))
+      (str red text reset)
+      text)))
