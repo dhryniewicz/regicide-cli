@@ -68,10 +68,10 @@
        ""])))
 
 (defn render-play-prompt []
-  "Play cards (numbers separated by spaces), or type 'help': ")
+  "Play cards (e.g. 3, 2 4 for combo) | p=sort h=help q=quit: ")
 
 (defn render-discard-prompt [attack]
-  (str "Discard cards to absorb " attack " damage (numbers separated by spaces): "))
+  (str "Discard " attack " damage (card numbers) | p=sort h=help q=quit: "))
 
 (defn render-help []
   (str/join "\n"
@@ -79,10 +79,10 @@
      "=== HELP ==="
      "  Play phase:   Enter card numbers to play (e.g., '3' or '2 4' for a combo)"
      "  Discard phase: Enter card numbers to discard to absorb enemy attack"
-     "  Commands:"
-     "    h, help, ?  - Show this help"
-     "    sort        - Toggle hand sorting (unsorted -> by suit -> by rank)"
-     "    q, quit     - Quit the game"
+     "  Instant keys (no Enter needed):"
+     "    p  - Toggle hand sorting (unsorted -> by suit -> by rank)"
+     "    h  - Show this help"
+     "    q  - Quit the game"
      ""
      "  Suit Powers:"
      (str "    " (card/suit-symbols :spades) " Spades   - Reduce enemy attack")

@@ -2,35 +2,20 @@
   (:require [clojure.string :as str]))
 
 (defn parse-command
-  "Parse player input into a command map.
-   Returns {:type :play/:discard/:yield/:quit/:help/:state/:invalid, ...}"
+  "Parse line input into a command map. Only handles card number selection
+   since single-key commands (p/h/q) are handled at the raw input level."
   [input phase hand-size]
-  (let [trimmed (str/trim (str/lower-case (str input)))]
-    (cond
-      (contains? #{"q" "quit" "exit"} trimmed)
-      {:type :quit}
-
-      (contains? #{"h" "help" "?"} trimmed)
-      {:type :help}
-
-      (contains? #{"s" "state"} trimmed)
-      {:type :state}
-
-      (contains? #{"sort"} trimmed)
-      {:type :sort}
-
-      (str/blank? trimmed)
-      {:type :invalid :message "Please enter card numbers or a command."}
-
-      :else
+  (let [trimmed (str/trim (str input))]
+    (if (str/blank? trimmed)
+      {:type :invalid :message "Enter card numbers (e.g., '3' or '2 4' for a combo)."}
       (let [parts (str/split trimmed #"\s+")
             nums (try
                    (mapv #(Integer/parseInt %) parts)
                    (catch Exception _
                      nil))]
         (if (nil? nums)
-          {:type :invalid :message (str "Could not parse '" trimmed "'. Enter card numbers (e.g., '1 3') or 'help'.")}
-          (let [indices (mapv dec nums) ;; 1-based input to 0-based
+          {:type :invalid :message (str "Could not parse '" trimmed "'. Enter card numbers.")}
+          (let [indices (mapv dec nums)
                 out-of-range (some #(or (neg? %) (>= % hand-size)) indices)]
             (cond
               out-of-range
