@@ -80,6 +80,8 @@
 
 (def ^:private yellow "\u001b[33m")
 (def ^:private red "\u001b[31m")
+(def ^:private dim "\u001b[2m")
+(def ^:private strikethrough "\u001b[9m")
 (def ^:private ansi-reset "\u001b[0m")
 
 (def ^:private suit-power-labels
@@ -186,8 +188,6 @@
      "  A cooperative card game of regicide"
      ""]))
 
-(def ^:private dim "\u001b[2m")
-(def ^:private strikethrough "\u001b[9m")
 
 (defn- render-cancelled-powers
   "Render lines for suit powers that were cancelled by enemy immunity."
