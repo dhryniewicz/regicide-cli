@@ -104,8 +104,11 @@
             exact-kill (enemy/exact-kill? current-enemy damage)
             state (update state :current-enemy enemy/apply-damage damage)
 
-            ;; 5. Apply Diamonds: draw cards into current player's hand
-            state (let [draw-count (min (:diamonds-draw effects) (count (:tavern-deck state)))
+            ;; 5. Apply Diamonds: draw cards into current player's hand (capped at hand limit)
+            state (let [hand-limit (hand-sizes (:num-players state))
+                        current-count (count (current-hand state))
+                        room (max 0 (- hand-limit current-count))
+                        draw-count (min (:diamonds-draw effects) (count (:tavern-deck state)) room)
                         [drawn remaining] (deck/draw (:tavern-deck state) draw-count)]
                     (-> state
                         (assoc :tavern-deck remaining)
