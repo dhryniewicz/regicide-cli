@@ -16,6 +16,9 @@
       (contains? #{"s" "state"} trimmed)
       {:type :state}
 
+      (contains? #{"sort"} trimmed)
+      {:type :sort}
+
       (str/blank? trimmed)
       {:type :invalid :message "Please enter card numbers or a command."}
 

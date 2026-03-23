@@ -9,6 +9,11 @@
   (flush)
   (read-line))
 
+(def ^:private sort-cycle {:none :suit, :suit :rank, :rank :none})
+
+(defn- toggle-sort [state]
+  (update state :sort-order #(sort-cycle (or % :none))))
+
 (defn- show [& texts]
   (doseq [t texts]
     (when t (println t))))
@@ -30,6 +35,7 @@
               :quit nil
               :help (do (show (display/render-help)) :retry)
               :state (do (show (display/render-game-state state)) :retry)
+              :sort [(toggle-sort state) nil]
               :invalid (do (show (str "  " (:message cmd))) :retry)
               :play
               (let [result (game/play-cards state (:indices cmd))]
@@ -70,6 +76,7 @@
               :quit nil
               :help (do (show (display/render-help)) :retry)
               :state (do (show (display/render-game-state state)) :retry)
+              :sort [(toggle-sort state) nil]
               :invalid (do (show (str "  " (:message cmd))) :retry)
               :discard
               (let [result (game/suffer-damage state (:indices cmd))]

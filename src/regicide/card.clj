@@ -44,3 +44,15 @@
     (if (#{:hearts :diamonds} (:suit card))
       (str red text reset)
       text)))
+
+(def suit-order {:spades 0 :hearts 1 :diamonds 2 :clubs 3})
+
+(defn sort-by-suit
+  "Sort cards by suit, then by rank within each suit."
+  [cards]
+  (vec (sort-by (juxt (comp suit-order :suit) :rank) cards)))
+
+(defn sort-by-rank
+  "Sort cards by rank, then by suit within each rank."
+  [cards]
+  (vec (sort-by (juxt :rank (comp suit-order :suit)) cards)))

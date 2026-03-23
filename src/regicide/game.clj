@@ -45,7 +45,8 @@
      :current-enemy  (enemy/make-enemy first-enemy)
      :phase          :play-cards
      :status         :in-progress
-     :num-players    num-players}))
+     :num-players    num-players
+     :sort-order     :none}))
 
 ;; ---------------------------------------------------------------------------
 ;; Helpers

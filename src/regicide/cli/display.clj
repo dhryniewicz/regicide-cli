@@ -27,16 +27,29 @@
               (str "  (reduced by " (- max-attack attack) ")")))
        (str "  Immune to: " immune-suit " (" (clojure.core/name (:suit card)) ")")])))
 
-(defn render-hand [hand]
+(defn- sorted-hand-with-indices
+  "Returns a seq of [original-index card] pairs, sorted according to sort-order."
+  [hand sort-order]
+  (let [indexed (map-indexed vector hand)]
+    (case sort-order
+      :suit (sort-by (fn [[_ c]] [(card/suit-order (:suit c)) (:rank c)]) indexed)
+      :rank (sort-by (fn [[_ c]] [(:rank c) (card/suit-order (:suit c))]) indexed)
+      indexed)))
+
+(defn render-hand [hand sort-order]
   (if (empty? hand)
     "  (empty)"
     (str/join "  "
-      (map-indexed (fn [i c]
-                     (str "[" (inc i) "] " (card/card-label c)))
-                   hand))))
+      (map (fn [[i c]]
+             (str "[" (inc i) "] " (card/card-label c)))
+           (sorted-hand-with-indices hand sort-order)))))
+
+(def ^:private sort-order-labels
+  {:none "unsorted" :suit "by suit" :rank "by rank"})
 
 (defn render-game-state [state]
-  (let [{:keys [tavern-deck discard-pile castle-deck current-enemy]} state
+  (let [{:keys [tavern-deck discard-pile castle-deck current-enemy sort-order]} state
+        sort-order (or sort-order :none)
         hand (game/current-hand state)
         enemies-remaining (inc (count castle-deck))]
     (str/join "\n"
@@ -50,8 +63,8 @@
             "  |  Discard: " (count discard-pile) " cards"
             "  |  Enemies remaining: " enemies-remaining)
        ""
-       "Your Hand:"
-       (str "  " (render-hand hand))
+       (str "Your Hand (" (sort-order-labels sort-order) "):")
+       (str "  " (render-hand hand sort-order))
        ""])))
 
 (defn render-play-prompt []
@@ -68,6 +81,7 @@
      "  Discard phase: Enter card numbers to discard to absorb enemy attack"
      "  Commands:"
      "    h, help, ?  - Show this help"
+     "    sort        - Toggle hand sorting (unsorted -> by suit -> by rank)"
      "    q, quit     - Quit the game"
      ""
      "  Suit Powers:"
