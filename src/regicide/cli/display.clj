@@ -151,23 +151,6 @@
      ""
      "  Press any key to continue..."]))
 
-(defn render-enemy-defeated
-  "Render an interstitial screen when an enemy is defeated."
-  [action-info defeated-card next-enemy enemies-left]
-  (let [green "\u001b[32m"]
-    (str/join "\n"
-      (remove nil?
-        [""
-         (str green term/bold "=== ENEMY DEFEATED ===" ansi-reset)
-         ""
-         (render-action-result action-info)
-         ""
-         (str "  Enemies remaining: " enemies-left)
-         (when next-enemy
-           (str "\n  Next enemy: " (render-enemy next-enemy)))
-         ""
-         "  Press any key to continue..."]))))
-
 (defn render-game-over [state]
   (case (:status state)
     :won  "\n*** VICTORY! You have defeated all enemies! ***\n"
@@ -207,24 +190,40 @@
 (defn render-action-result [action-info]
   (when action-info
     (let [immune (:immune-suit action-info)
-          played-suits (:played-suits action-info)]
-      (str/join "\n"
-        (remove nil?
-          (concat
-            [(when-let [cards (:played action-info)]
-               (str "  Played: " (str/join " " (map card/card-label cards))))
-             (when-let [dmg (:damage action-info)]
-               (str "  Damage dealt: " dmg))
-             (when (pos? (or (:attack-reduce action-info) 0))
-               (str "  " (card/suit-symbols :spades) " Reduced enemy attack by " (:attack-reduce action-info)))
-             (when (pos? (or (:hearts-heal action-info) 0))
-               (str "  " (card/suit-symbols :hearts) " Recycled " (:hearts-heal action-info) " cards from discard"))
-             (when (pos? (or (:diamonds-draw action-info) 0))
-               (str "  " (card/suit-symbols :diamonds) " Drew " (:diamonds-draw action-info) " cards"))]
-            (render-cancelled-powers immune played-suits)
-            [(when (:enemy-defeated action-info)
-               (if (:exact-kill action-info)
-                 "  >> Enemy defeated! (Exact kill - enemy card added to your hand!)"
-                 "  >> Enemy defeated!"))
-             (when-let [discarded (:discarded action-info)]
-               (str "  Discarded to absorb damage: " (str/join " " (map card/card-label discarded))))]))))))
+          played-suits (:played-suits action-info)
+          lines (concat
+                  [(when-let [cards (:played action-info)]
+                     (str "  Played: " (str/join " " (map card/card-label cards))))
+                   (when-let [dmg (:damage action-info)]
+                     (str "  Damage dealt: " dmg))
+                   (when (pos? (or (:attack-reduce action-info) 0))
+                     (str "  " (card/suit-symbols :spades) " Reduced enemy attack by " (:attack-reduce action-info)))
+                   (when (pos? (or (:hearts-heal action-info) 0))
+                     (str "  " (card/suit-symbols :hearts) " Recycled " (:hearts-heal action-info) " cards from discard"))
+                   (when (pos? (or (:diamonds-draw action-info) 0))
+                     (str "  " (card/suit-symbols :diamonds) " Drew " (:diamonds-draw action-info) " cards"))]
+                  (render-cancelled-powers immune played-suits)
+                  [(when (:enemy-defeated action-info)
+                     (if (:exact-kill action-info)
+                       "  >> Enemy defeated! (Exact kill - enemy card added to your hand!)"
+                       "  >> Enemy defeated!"))
+                   (when-let [discarded (:discarded action-info)]
+                     (str "  Discarded to absorb damage: " (str/join " " (map card/card-label discarded))))])]
+      (str/join "\n" (remove nil? lines)))))
+
+(defn render-enemy-defeated
+  "Render an interstitial screen when an enemy is defeated."
+  [action-info defeated-card next-enemy enemies-left]
+  (let [green "\u001b[32m"]
+    (str/join "\n"
+      (remove nil?
+        [""
+         (str green term/bold "=== ENEMY DEFEATED ===" ansi-reset)
+         ""
+         (render-action-result action-info)
+         ""
+         (str "  Enemies remaining: " enemies-left)
+         (when next-enemy
+           (str "\n  Next enemy:\n" (render-enemy next-enemy)))
+         ""
+         "  Press any key to continue..."]))))
