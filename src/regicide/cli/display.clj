@@ -151,6 +151,23 @@
      ""
      "  Press any key to continue..."]))
 
+(defn render-enemy-defeated
+  "Render an interstitial screen when an enemy is defeated."
+  [action-info defeated-card next-enemy enemies-left]
+  (let [green "\u001b[32m"]
+    (str/join "\n"
+      (remove nil?
+        [""
+         (str green term/bold "=== ENEMY DEFEATED ===" ansi-reset)
+         ""
+         (render-action-result action-info)
+         ""
+         (str "  Enemies remaining: " enemies-left)
+         (when next-enemy
+           (str "\n  Next enemy: " (render-enemy next-enemy)))
+         ""
+         "  Press any key to continue..."]))))
+
 (defn render-game-over [state]
   (case (:status state)
     :won  "\n*** VICTORY! You have defeated all enemies! ***\n"

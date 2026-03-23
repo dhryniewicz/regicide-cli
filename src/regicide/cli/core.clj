@@ -152,7 +152,17 @@
               (show (display/render-game-over new-state)))
 
           :else
-          (recur new-state new-action))))))
+          (do
+            (when (:enemy-defeated new-action)
+              (let [enemies-left (inc (count (:castle-deck new-state)))
+                    next-enemy (:current-enemy new-state)]
+                (print term/clear-screen)
+                (show (display/render-enemy-defeated new-action
+                        (get-in state [:current-enemy :card])
+                        next-enemy enemies-left))
+                (flush)
+                (term/read-key)))
+            (recur new-state nil)))))))
 
 (defn -main [& args]
   (let [num-players (if (first args)
