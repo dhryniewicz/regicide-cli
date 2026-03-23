@@ -24,9 +24,13 @@
 
 (defn card-value
   "Returns the numeric value of a card for damage/discard purposes.
-   Ace=1, 2-10=face value."
+   Ace=1, 2-10=face value, J=10, Q=15, K=20."
   [card]
-  (:rank card))
+  (case (:rank card)
+    11 10
+    12 15
+    13 20
+    (:rank card)))
 
 (defn rank-label [rank]
   (case rank

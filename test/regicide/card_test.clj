@@ -12,7 +12,10 @@
 (deftest card-value-test
   (is (= 1 (card/card-value (card/make-card :hearts 1))))
   (is (= 5 (card/card-value (card/make-card :clubs 5))))
-  (is (= 10 (card/card-value (card/make-card :spades 10)))))
+  (is (= 10 (card/card-value (card/make-card :spades 10))))
+  (is (= 10 (card/card-value (card/make-card :hearts 11))) "Jack = 10")
+  (is (= 15 (card/card-value (card/make-card :hearts 12))) "Queen = 15")
+  (is (= 20 (card/card-value (card/make-card :hearts 13))) "King = 20"))
 
 (deftest card-label-test
   (is (= "\u001b[31mA\u2665\u001b[0m" (card/card-label (card/make-card :hearts 1)))
