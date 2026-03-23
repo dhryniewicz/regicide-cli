@@ -49,42 +49,57 @@
   (testing "empty is invalid"
     (is (not (rules/valid-combo? [])))))
 
-(deftest combo-damage-test
-  (is (= 5 (rules/combo-damage [(card/make-card :hearts 5)])))
-  (is (= 10 (rules/combo-damage [(card/make-card :hearts 5)
-                                  (card/make-card :clubs 5)])))
-  (is (= 6 (rules/combo-damage [(card/make-card :hearts 1)
-                                 (card/make-card :clubs 5)]))))
+(deftest combo-value-test
+  (is (= 5 (rules/combo-value [(card/make-card :hearts 5)])))
+  (is (= 10 (rules/combo-value [(card/make-card :hearts 5)
+                                 (card/make-card :clubs 5)])))
+  (is (= 6 (rules/combo-value [(card/make-card :hearts 1)
+                                (card/make-card :clubs 5)]))))
 
 (deftest suit-effects-test
   (let [enemy (enemy/make-enemy (card/make-card :spades 11))] ;; Jack of Spades
-    (testing "clubs double damage"
+    (testing "clubs activates with full combo value"
       (let [effects (rules/suit-effects [(card/make-card :clubs 5)] enemy)]
-        (is (= 5 (:damage-bonus effects)))))
+        (is (:clubs? effects))))
 
     (testing "spades immune on spade enemy"
       (let [effects (rules/suit-effects [(card/make-card :spades 5)] enemy)]
         (is (= 0 (:attack-reduce effects)))))
 
-    (testing "hearts heal"
+    (testing "hearts uses full combo value"
       (let [effects (rules/suit-effects [(card/make-card :hearts 3)] enemy)]
         (is (= 3 (:hearts-heal effects)))))
 
-    (testing "diamonds draw"
+    (testing "diamonds uses full combo value"
       (let [effects (rules/suit-effects [(card/make-card :diamonds 4)] enemy)]
-        (is (= 4 (:diamonds-draw effects)))))))
+        (is (= 4 (:diamonds-draw effects)))))
+
+    (testing "mixed combo - each suit uses full combo value"
+      (let [effects (rules/suit-effects [(card/make-card :clubs 1)
+                                          (card/make-card :hearts 5)] enemy)]
+        (is (:clubs? effects))
+        (is (= 6 (:hearts-heal effects)))))))
 
 (deftest total-damage-test
   (let [enemy (enemy/make-enemy (card/make-card :hearts 11))]
-    (testing "clubs doubles"
+    (testing "clubs doubles full combo value"
       (is (= 10 (rules/total-damage [(card/make-card :clubs 5)] enemy))))
 
     (testing "non-club normal damage"
       (is (= 5 (rules/total-damage [(card/make-card :spades 5)] enemy))))
 
-    (testing "mixed combo"
-      (is (= 15 (rules/total-damage [(card/make-card :clubs 5)
-                                      (card/make-card :spades 5)] enemy))))))
+    (testing "mixed combo - clubs doubles everything"
+      (is (= 20 (rules/total-damage [(card/make-card :clubs 5)
+                                      (card/make-card :spades 5)] enemy))))
+
+    (testing "ace of clubs + 5 of spades = 12 damage"
+      (is (= 12 (rules/total-damage [(card/make-card :clubs 1)
+                                      (card/make-card :spades 5)] enemy))))
+
+    (testing "suit powers use full combo value"
+      (let [effects (rules/suit-effects [(card/make-card :clubs 1)
+                                          (card/make-card :spades 5)] enemy)]
+        (is (= 6 (:attack-reduce effects)))))))
 
 (deftest can-absorb-damage-test
   (let [hand [(card/make-card :hearts 3)

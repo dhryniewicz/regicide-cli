@@ -29,34 +29,35 @@
                  (apply = non-aces))) true
         :else false))))
 
-(defn combo-damage
-  "Base damage of a combo (sum of card values, before suit modifiers)."
+(defn combo-value
+  "Total played value of a combo (sum of card values)."
   [cards]
   (reduce + (map card/card-value cards)))
 
-(defn suit-effects
-  "Compute suit power effects for played cards, respecting enemy immunity.
-   Returns {:damage-bonus N :attack-reduce N :hearts-heal N :diamonds-draw N}"
+(defn- active-suits
+  "Returns the set of suits present in the combo that the enemy is NOT immune to."
   [cards current-enemy]
-  (reduce
-    (fn [effects card]
-      (if (enemy/immune-to-suit? current-enemy (:suit card))
-        effects
-        (let [v (card/card-value card)]
-          (case (:suit card)
-            :clubs    (update effects :damage-bonus + v)
-            :spades   (update effects :attack-reduce + v)
-            :hearts   (update effects :hearts-heal + v)
-            :diamonds (update effects :diamonds-draw + v)))))
-    {:damage-bonus 0 :attack-reduce 0 :hearts-heal 0 :diamonds-draw 0}
-    cards))
+  (into #{}
+    (remove #(enemy/immune-to-suit? current-enemy %)
+            (map :suit cards))))
+
+(defn suit-effects
+  "Compute suit power effects. Each active suit uses the full combo value.
+   Returns {:clubs? bool :attack-reduce N :hearts-heal N :diamonds-draw N}"
+  [cards current-enemy]
+  (let [value (combo-value cards)
+        suits (active-suits cards current-enemy)]
+    {:clubs?        (contains? suits :clubs)
+     :attack-reduce (if (contains? suits :spades)   value 0)
+     :hearts-heal   (if (contains? suits :hearts)   value 0)
+     :diamonds-draw (if (contains? suits :diamonds) value 0)}))
 
 (defn total-damage
-  "Total damage dealt by a combo (base + clubs bonus)."
+  "Total damage dealt by a combo. Clubs doubles the full combo value."
   [cards current-enemy]
-  (let [base (combo-damage cards)
+  (let [value (combo-value cards)
         effects (suit-effects cards current-enemy)]
-    (+ base (:damage-bonus effects))))
+    (if (:clubs? effects) (* 2 value) value)))
 
 (defn can-absorb-damage?
   "True if the hand has enough total card value to absorb the given attack."
