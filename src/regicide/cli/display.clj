@@ -1,6 +1,7 @@
 (ns regicide.cli.display
   (:require [regicide.card :as card]
             [regicide.game :as game]
+            [regicide.rules :as rules]
             [regicide.cli.terminal :as term]
             [clojure.string :as str]))
 
@@ -90,6 +91,65 @@
    :diamonds "Draw cards"
    :clubs    "Double damage"})
 
+(def ^:private green "\u001b[32m")
+(def ^:private cyan "\u001b[36m")
+
+(defn- render-selection-preview
+  "Render a live preview of what the current card selection will do."
+  [hand selected-indices enemy phase]
+  (let [cards (mapv hand (sort selected-indices))]
+    (case phase
+      :play-cards
+      (if-not (rules/valid-combo? cards)
+        (str "  " red "\u2716 Invalid combo" ansi-reset)
+        (let [effects (rules/suit-effects cards enemy)
+              damage (rules/total-damage cards enemy)
+              health (:health enemy)
+              kills (>= damage health)
+              exact (= damage health)
+              immune-suit (get-in enemy [:card :suit])
+              played-suits (set (map :suit cards))
+              lines (remove nil?
+                      [(str "  " cyan "Preview: " ansi-reset
+                            (str/join " + " (map card/card-label cards))
+                            " = " damage " damage"
+                            (when (:clubs? effects) " (clubs 2x)"))
+                       (when (pos? (:attack-reduce effects))
+                         (str "    " (card/suit-symbols :spades)
+                              " Enemy attack " (:attack enemy)
+                              " \u2192 " (max 0 (- (:attack enemy) (:attack-reduce effects)))))
+                       (when (pos? (:hearts-heal effects))
+                         (str "    " (card/suit-symbols :hearts)
+                              " Recycle up to " (:hearts-heal effects) " cards"))
+                       (when (pos? (:diamonds-draw effects))
+                         (str "    " (card/suit-symbols :diamonds)
+                              " Draw up to " (:diamonds-draw effects) " cards"))
+                       (when (contains? played-suits immune-suit)
+                         (str "    " dim (card/suit-symbols immune-suit)
+                              " " (suit-power-labels immune-suit)
+                              " — blocked" ansi-reset))
+                       (cond
+                         exact (str "  " green term/bold
+                                    "\u2192 EXACT KILL! (enemy goes to hand)" ansi-reset)
+                         kills (str "  " green term/bold
+                                    "\u2192 Defeats enemy (" damage "/" health ")" ansi-reset)
+                         :else (str "  " dim
+                                    "\u2192 Enemy health: " health
+                                    " \u2192 " (- health damage) ansi-reset))])]
+          (str/join "\n" lines)))
+
+      :suffer-damage
+      (let [total (reduce + (map card/card-value cards))
+            attack (:attack enemy)
+            enough (>= total attack)]
+        (str "  " cyan "Preview: " ansi-reset
+             "discard value = " total "/" attack
+             (if enough
+               (str "  " green "\u2713 enough" ansi-reset)
+               (str "  " red "\u2716 need " (- attack total) " more" ansi-reset))))
+
+      nil)))
+
 (defn- render-phase-banner [phase enemy]
   (let [attack (:attack enemy)]
     (case phase
@@ -120,7 +180,12 @@
                             (when (and card-at-cursor (= (:suit card-at-cursor) immune-suit))
                               (str "  " dim yellow "\u26a0 " (card/suit-symbols immune-suit) " "
                                    (suit-power-labels immune-suit)
-                                   " — blocked by enemy immunity" ansi-reset))))]
+                                   " — blocked by enemy immunity" ansi-reset))))
+         selection-preview (when (and selector-state
+                                      (seq (:selected selector-state)))
+                             (render-selection-preview
+                               hand (:selected selector-state)
+                               current-enemy phase))]
      (str/join "\n"
        (remove nil?
          [""
@@ -138,6 +203,7 @@
           (str "Your Hand (" (sort-order-labels sort-order) "):")
           (str "  " hand-display)
           cursor-warning
+          selection-preview
           ""])))))
 
 (defn render-selector-prompt [phase]
