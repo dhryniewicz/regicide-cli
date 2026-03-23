@@ -1,6 +1,7 @@
 (ns regicide.cli.display
   (:require [regicide.card :as card]
             [regicide.game :as game]
+            [regicide.cli.terminal :as term]
             [clojure.string :as str]))
 
 (defn health-bar [current max-val width]
@@ -27,62 +28,101 @@
               (str "  (reduced by " (- max-attack attack) ")")))
        (str "  Immune to: " immune-suit " (" (clojure.core/name (:suit card)) ")")])))
 
-(defn- sorted-hand-with-indices
-  "Returns a seq of [original-index card] pairs, sorted according to sort-order."
-  [hand sort-order]
-  (let [indexed (map-indexed vector hand)]
-    (case sort-order
-      :suit (sort-by (fn [[_ c]] [(card/suit-order (:suit c)) (:rank c)]) indexed)
-      :rank (sort-by (fn [[_ c]] [(:rank c) (card/suit-order (:suit c))]) indexed)
-      indexed)))
-
-(defn render-hand [hand sort-order]
-  (if (empty? hand)
-    "  (empty)"
-    (str/join "  "
-      (map (fn [[i c]]
-             (str "[" (inc i) "] " (card/card-label c)))
-           (sorted-hand-with-indices hand sort-order)))))
-
 (def ^:private sort-order-labels
   {:none "unsorted" :suit "by suit" :rank "by rank"})
 
-(defn render-game-state [state]
-  (let [{:keys [tavern-deck discard-pile castle-deck current-enemy sort-order]} state
-        sort-order (or sort-order :none)
-        hand (game/current-hand state)
-        enemies-remaining (inc (count castle-deck))]
-    (str/join "\n"
-      [""
-       "=== REGICIDE ==="
-       ""
-       "Current Enemy:"
-       (render-enemy current-enemy)
-       ""
-       (str "  Tavern: " (count tavern-deck) " cards"
-            "  |  Discard: " (count discard-pile) " cards"
-            "  |  Enemies remaining: " enemies-remaining)
-       ""
-       (str "Your Hand (" (sort-order-labels sort-order) "):")
-       (str "  " (render-hand hand sort-order))
-       ""])))
+(defn sorted-hand-with-indices
+  "Returns a vec of [original-index card] pairs, sorted according to sort-order."
+  [hand sort-order]
+  (let [indexed (map-indexed vector hand)]
+    (vec
+      (case sort-order
+        :suit (sort-by (fn [[_ c]] [(card/suit-order (:suit c)) (:rank c)]) indexed)
+        :rank (sort-by (fn [[_ c]] [(:rank c) (card/suit-order (:suit c))]) indexed)
+        indexed))))
 
-(defn render-play-prompt []
-  "Play cards (e.g. 3, 2 4 for combo) | p=sort h=help q=quit: ")
+(defn render-hand-selector
+  "Render the hand with cursor and selection indicators.
+   cursor-pos is position in the display order (0-based).
+   selected is a set of original indices that are selected."
+  [hand sort-order cursor-pos selected]
+  (if (empty? hand)
+    "  (empty)"
+    (let [display-cards (sorted-hand-with-indices hand sort-order)]
+      (str/join "  "
+        (map-indexed
+          (fn [display-idx [orig-idx c]]
+            (let [is-cursor (= display-idx cursor-pos)
+                  is-selected (contains? selected orig-idx)
+                  label (card/card-label c)]
+              (cond
+                (and is-cursor is-selected)
+                (str term/reverse-video term/underline "\u2713" label term/reset)
 
-(defn render-discard-prompt [attack]
-  (str "Discard " attack " damage (card numbers) | p=sort h=help q=quit: "))
+                is-cursor
+                (str term/reverse-video " " label term/reset)
+
+                is-selected
+                (str term/underline "\u2713" label term/reset)
+
+                :else
+                (str " " label))))
+          display-cards)))))
+
+(defn render-hand-static
+  "Render hand without selection UI (for game state display without interaction)."
+  [hand sort-order]
+  (if (empty? hand)
+    "  (empty)"
+    (str/join "  "
+      (map (fn [[_ c]] (str " " (card/card-label c)))
+           (sorted-hand-with-indices hand sort-order)))))
+
+(defn render-game-state
+  "Render the full game state. When selector-state is provided, shows interactive hand."
+  ([state] (render-game-state state nil))
+  ([state selector-state]
+   (let [{:keys [tavern-deck discard-pile castle-deck current-enemy sort-order]} state
+         sort-order (or sort-order :none)
+         hand (game/current-hand state)
+         enemies-remaining (inc (count castle-deck))
+         hand-display (if selector-state
+                        (render-hand-selector hand sort-order
+                                             (:cursor selector-state)
+                                             (:selected selector-state))
+                        (render-hand-static hand sort-order))]
+     (str/join "\n"
+       [""
+        "=== REGICIDE ==="
+        ""
+        "Current Enemy:"
+        (render-enemy current-enemy)
+        ""
+        (str "  Tavern: " (count tavern-deck) " cards"
+             "  |  Discard: " (count discard-pile) " cards"
+             "  |  Enemies remaining: " enemies-remaining)
+        ""
+        (str "Your Hand (" (sort-order-labels sort-order) "):")
+        (str "  " hand-display)
+        ""]))))
+
+(defn render-selector-prompt [phase]
+  (case phase
+    :play-cards    "\u2190\u2192 move  \u2191 select  Enter play  p sort  h help  q quit"
+    :suffer-damage "\u2190\u2192 move  \u2191 select  Enter discard  p sort  h help  q quit"))
 
 (defn render-help []
   (str/join "\n"
     [""
      "=== HELP ==="
-     "  Play phase:   Enter card numbers to play (e.g., '3' or '2 4' for a combo)"
-     "  Discard phase: Enter card numbers to discard to absorb enemy attack"
-     "  Instant keys (no Enter needed):"
-     "    p  - Toggle hand sorting (unsorted -> by suit -> by rank)"
-     "    h  - Show this help"
-     "    q  - Quit the game"
+     ""
+     "  Controls:"
+     "    \u2190 \u2192     - Move cursor left/right"
+     "    \u2191        - Toggle card selection"
+     "    Enter    - Play/discard selected cards"
+     "    p        - Toggle hand sorting (unsorted -> by suit -> by rank)"
+     "    h        - Show this help"
+     "    q        - Quit the game"
      ""
      "  Suit Powers:"
      (str "    " (card/suit-symbols :spades) " Spades   - Reduce enemy attack")
@@ -92,7 +132,8 @@
      ""
      "  Combos: Play multiple cards of the same rank, or Ace + card(s)"
      "  Exact kill: If damage equals remaining health exactly, enemy goes to your hand"
-     ""]))
+     ""
+     "  Press any key to continue..."]))
 
 (defn render-game-over [state]
   (case (:status state)
@@ -113,9 +154,7 @@
      "  A cooperative card game of regicide"
      ""]))
 
-(defn render-action-result
-  "Render a summary of what just happened."
-  [action-info]
+(defn render-action-result [action-info]
   (when action-info
     (str/join "\n"
       (remove nil?

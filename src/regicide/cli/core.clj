@@ -1,9 +1,7 @@
 (ns regicide.cli.core
-  (:require [regicide.card :as card]
-            [regicide.game :as game]
+  (:require [regicide.game :as game]
             [regicide.rules :as rules]
             [regicide.cli.display :as display]
-            [regicide.cli.input :as input]
             [regicide.cli.terminal :as term]))
 
 (def ^:private sort-cycle {:none :suit, :suit :rank, :rank :none})
@@ -15,131 +13,146 @@
   (doseq [t texts]
     (when t (println t))))
 
-(defn- read-input
-  "Read input in raw mode. Single-key commands (p/h/q) fire instantly.
-   Digit input accumulates until Enter for card selection."
-  [prompt]
-  (print prompt)
-  (flush)
-  (loop []
-    (let [c (term/read-char)]
-      (cond
-        (nil? c) nil
+(defn- redraw!
+  "Clear screen and redraw the game state with selector."
+  [state selector-state action-info phase]
+  (print term/clear-screen)
+  (show (display/render-game-state state selector-state))
+  (when action-info
+    (show (display/render-action-result action-info)))
+  (println (display/render-selector-prompt phase))
+  (flush))
 
-        ;; Instant single-key commands
-        (= c \p) {:type :sort}
-        (= c \q) {:type :quit}
-        (or (= c \h) (= c \?)) {:type :help}
-
-        ;; Digit starts a card selection - echo it and read rest of line
-        (Character/isDigit c)
-        (do (print c) (flush)
-            (let [rest-line (term/read-line-raw)]
-              (when rest-line
-                {:type :line :text (str c rest-line)})))
-
-        ;; Enter on empty input
-        (or (= c \newline) (= c \return))
-        (do (println) {:type :line :text ""})
-
-        ;; Ignore other keys
-        :else (recur)))))
-
-(defn- process-input
-  "Read input and return a command map for the given phase."
-  [prompt phase hand-size]
-  (let [result (read-input prompt)]
-    (cond
-      (nil? result) nil
-      (#{:sort :quit :help} (:type result)) result
-      (= :line (:type result))
-      (input/parse-command (:text result) phase hand-size))))
+(defn- card-select-loop
+  "Interactive card selection with arrow keys.
+   Returns selected original indices as a vec, or :quit, or :help."
+  [state phase action-info]
+  (let [hand (game/current-hand state)
+        hand-size (count hand)]
+    (when (pos? hand-size)
+      (loop [cursor 0
+             selected #{}]
+        (redraw! state {:cursor cursor :selected selected} action-info phase)
+        (let [key (term/read-key)]
+          (case key
+            :left  (recur (mod (dec cursor) hand-size) selected)
+            :right (recur (mod (inc cursor) hand-size) selected)
+            :up    (let [display-cards (display/sorted-hand-with-indices hand (or (:sort-order state) :none))
+                         [orig-idx _] (nth display-cards cursor)
+                         new-selected (if (contains? selected orig-idx)
+                                        (disj selected orig-idx)
+                                        (conj selected orig-idx))]
+                     (recur cursor new-selected))
+            :enter (if (empty? selected)
+                     (recur cursor selected)
+                     (vec selected))
+            :quit  (recur cursor selected)
+            (:escape :down) (recur cursor selected)
+            (cond
+              (= key \p) :sort
+              (= key \q) :quit
+              (or (= key \h) (= key \?)) :help
+              :else (recur cursor selected))))))))
 
 (defn- play-phase
   "Handle the play-cards phase. Returns [new-state action-info] or nil on quit."
-  [state]
+  [state action-info]
   (let [hand (game/current-hand state)]
     (if (empty? hand)
       [(game/check-can-play state) nil]
-      (let [cmd (process-input (display/render-play-prompt) :play-cards (count hand))]
-        (case (:type cmd)
-          nil nil
-          :quit nil
-          :help (do (println) (show (display/render-help)) :retry)
-          :sort [(toggle-sort state) nil]
-          :invalid (do (show (str "  " (:message cmd))) :retry)
-          :play
-          (let [result (game/play-cards state (:indices cmd))]
-            (if (:error result)
-              (do (show (str "  " (:error result))) :retry)
-              (let [cards (mapv (game/current-hand state) (:indices cmd))
+      (let [result (card-select-loop state :play-cards action-info)]
+        (cond
+          (nil? result) nil
+          (= :quit result) nil
+          (= :sort result) [(toggle-sort state) action-info]
+          (= :help result)
+          (do (print term/clear-screen)
+              (show (display/render-help))
+              (term/read-key)
+              [state action-info])
+
+          :else ;; vec of indices
+          (let [play-result (game/play-cards state result)]
+            (if (:error play-result)
+              (do (print term/clear-screen)
+                  (show (display/render-game-state state))
+                  (show (str "\n  " (:error play-result)))
+                  (println "\n  Press any key...")
+                  (flush)
+                  (term/read-key)
+                  [state nil])
+              (let [cards (mapv (game/current-hand state) result)
                     effects (rules/suit-effects cards (:current-enemy state))
                     damage (rules/total-damage cards (:current-enemy state))
                     enemy (:current-enemy state)
                     defeated (>= damage (:health enemy))
-                    exact (and defeated
-                               (= damage (:health enemy)))
-                    action-info {:played cards
-                                 :damage damage
-                                 :attack-reduce (:attack-reduce effects)
-                                 :hearts-heal (min (:hearts-heal effects)
-                                                   (count (:discard-pile state)))
-                                 :diamonds-draw (min (:diamonds-draw effects)
-                                                     (count (:tavern-deck state)))
-                                 :enemy-defeated defeated
-                                 :exact-kill exact}]
-                [result action-info]))))))))
+                    exact (and defeated (= damage (:health enemy)))
+                    new-action {:played cards
+                                :damage damage
+                                :attack-reduce (:attack-reduce effects)
+                                :hearts-heal (min (:hearts-heal effects)
+                                                  (count (:discard-pile state)))
+                                :diamonds-draw (min (:diamonds-draw effects)
+                                                    (count (:tavern-deck state)))
+                                :enemy-defeated defeated
+                                :exact-kill exact}]
+                [play-result new-action]))))))))
 
 (defn- discard-phase
   "Handle the suffer-damage phase. Returns [new-state action-info] or nil on quit."
-  [state]
+  [state action-info]
   (let [state (game/check-can-survive state)]
     (if (= :lost (:status state))
       [state nil]
-      (let [hand (game/current-hand state)
-            attack (get-in state [:current-enemy :attack])]
-        (let [cmd (process-input (display/render-discard-prompt attack) :suffer-damage (count hand))]
-          (case (:type cmd)
-            nil nil
-            :quit nil
-            :help (do (println) (show (display/render-help)) :retry)
-            :sort [(toggle-sort state) nil]
-            :invalid (do (show (str "  " (:message cmd))) :retry)
-            :discard
-            (let [result (game/suffer-damage state (:indices cmd))]
-              (if (:error result)
-                (do (show (str "  " (:error result))) :retry)
-                (let [cards (mapv hand (:indices cmd))
-                      action-info {:discarded cards}]
-                  [result action-info])))))))))
+      (let [result (card-select-loop state :suffer-damage action-info)]
+        (cond
+          (nil? result) nil
+          (= :quit result) nil
+          (= :sort result) [(toggle-sort state) action-info]
+          (= :help result)
+          (do (print term/clear-screen)
+              (show (display/render-help))
+              (term/read-key)
+              [state action-info])
+
+          :else
+          (let [discard-result (game/suffer-damage state result)]
+            (if (:error discard-result)
+              (do (print term/clear-screen)
+                  (show (display/render-game-state state))
+                  (show (str "\n  " (:error discard-result)))
+                  (println "\n  Press any key...")
+                  (flush)
+                  (term/read-key)
+                  [state action-info])
+              (let [hand (game/current-hand state)
+                    cards (mapv hand result)
+                    new-action {:discarded cards}]
+                [discard-result new-action]))))))))
 
 (defn- game-loop [state]
   (loop [state state
          action-info nil]
     (when (= :in-progress (:status state))
-      (show (display/render-game-state state))
-      (when action-info
-        (show (display/render-action-result action-info)))
-      (let [result (case (:phase state)
-                     :play-cards    (play-phase state)
-                     :suffer-damage (discard-phase state)
-                     :game-over     nil)]
+      (let [[new-state new-action]
+            (case (:phase state)
+              :play-cards    (play-phase state action-info)
+              :suffer-damage (discard-phase state action-info)
+              :game-over     nil)]
         (cond
-          (nil? result)
-          (show "\nThanks for playing!")
+          (nil? new-state)
+          (do (print term/clear-screen) (flush)
+              (show "\nThanks for playing!"))
 
-          (= :retry result)
-          (recur state nil)
+          (#{:won :lost} (:status new-state))
+          (do (print term/clear-screen)
+              (show (display/render-game-state new-state))
+              (when new-action
+                (show (display/render-action-result new-action)))
+              (show (display/render-game-over new-state)))
 
           :else
-          (let [[new-state new-action] result]
-            (if (#{:won :lost} (:status new-state))
-              (do
-                (show (display/render-game-state new-state))
-                (when new-action
-                  (show (display/render-action-result new-action)))
-                (show (display/render-game-over new-state)))
-              (recur new-state new-action))))))))
+          (recur new-state new-action))))))
 
 (defn -main [& args]
   (let [num-players (if (first args)
@@ -152,6 +165,9 @@
     (try
       (show (display/render-welcome))
       (show (str "Starting game with " num-players " player(s)..."))
+      (println "\nPress any key to start...")
+      (flush)
+      (term/read-key)
       (let [state (game/new-game num-players)]
         (game-loop state))
       (finally

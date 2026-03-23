@@ -34,8 +34,8 @@ You are fighting through a castle of 12 enemies — 4 Jacks, 4 Queens, and 4 Kin
 
 ### Turn Structure
 
-1. **Play cards** — type card numbers from your hand (e.g., `3` or `2 4` for a combo)
-2. **Suffer damage** — if the enemy survives, discard cards whose values total at least the enemy's attack
+1. **Play cards** — select cards from your hand using arrow keys, then press Enter
+2. **Suffer damage** — if the enemy survives, select cards to discard to absorb the damage
 
 If you can't discard enough to absorb the attack, you lose.
 
@@ -66,10 +66,15 @@ Each suit has a special power that activates when you play a card of that suit:
 
 If your damage equals the enemy's remaining health exactly, the defeated enemy card goes into your hand instead of the discard pile.
 
-### In-Game Commands
+### Controls
 
-| Command       | Action              |
-|---------------|---------------------|
-| `1`, `2 3`    | Play/discard cards  |
-| `h`, `help`   | Show help           |
-| `q`, `quit`   | Quit the game       |
+All controls are instant (no Enter needed except to confirm selection):
+
+| Key           | Action                                          |
+|---------------|-------------------------------------------------|
+| `←` `→`       | Move cursor between cards                       |
+| `↑`           | Toggle selection on current card                |
+| `Enter`       | Play/discard selected cards                     |
+| `p`           | Toggle hand sorting (unsorted / by suit / by rank) |
+| `h`           | Show help                                       |
+| `q`           | Quit                                            |
