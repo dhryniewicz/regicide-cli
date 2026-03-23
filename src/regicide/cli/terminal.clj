@@ -16,6 +16,26 @@
     (when (>= b 0)
       (char b))))
 
+(defn- read-escape-sequence
+  "After reading ESC, wait briefly for the rest of an escape sequence.
+   Arrow keys send ESC [ A/B/C/D in rapid succession but the bytes
+   may not all be buffered when we check."
+  []
+  ;; Give the terminal a moment to deliver the remaining bytes
+  (Thread/sleep 20)
+  (if (pos? (.available System/in))
+    (let [c2 (read-char)]
+      (if (= c2 \[)
+        (let [c3 (read-char)]
+          (case c3
+            \A :up
+            \B :down
+            \C :right
+            \D :left
+            :escape))
+        :escape))
+    :escape))
+
 (defn read-key
   "Read a keypress. Returns a keyword for special keys, or a char for regular ones.
    Special keys: :left :right :up :down :enter :backspace :escape"
@@ -23,18 +43,7 @@
   (let [c (read-char)]
     (when c
       (case (int c)
-        27 (if (pos? (.available System/in))
-             (let [c2 (read-char)]
-               (if (= c2 \[)
-                 (let [c3 (read-char)]
-                   (case c3
-                     \A :up
-                     \B :down
-                     \C :right
-                     \D :left
-                     :escape))
-                 :escape))
-             :escape)
+        27 (read-escape-sequence)
         10 :enter
         13 :enter
         127 :backspace
