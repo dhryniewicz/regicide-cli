@@ -82,6 +82,12 @@
 (def ^:private red "\u001b[31m")
 (def ^:private ansi-reset "\u001b[0m")
 
+(def ^:private suit-power-labels
+  {:spades   "Reduce enemy attack"
+   :hearts   "Recycle from discard"
+   :diamonds "Draw cards"
+   :clubs    "Double damage"})
+
 (defn- render-phase-banner [phase enemy]
   (let [attack (:attack enemy)]
     (case phase
@@ -104,23 +110,33 @@
                         (render-hand-selector hand sort-order
                                              (:cursor selector-state)
                                              (:selected selector-state))
-                        (render-hand-static hand sort-order))]
+                        (render-hand-static hand sort-order))
+         immune-suit (get-in current-enemy [:card :suit])
+         cursor-warning (when selector-state
+                          (let [display-cards (sorted-hand-with-indices hand sort-order)
+                                [_ card-at-cursor] (nth display-cards (:cursor selector-state) nil)]
+                            (when (and card-at-cursor (= (:suit card-at-cursor) immune-suit))
+                              (str "  " dim yellow "\u26a0 " (card/suit-symbols immune-suit) " "
+                                   (suit-power-labels immune-suit)
+                                   " is immune against this enemy" ansi-reset))))]
      (str/join "\n"
-       [""
-        "=== REGICIDE ==="
-        ""
-        "Current Enemy:"
-        (render-enemy current-enemy)
-        ""
-        (str "  Tavern: " (count tavern-deck) " cards"
-             "  |  Discard: " (count discard-pile) " cards"
-             "  |  Enemies remaining: " enemies-remaining)
-        ""
-        (render-phase-banner phase current-enemy)
-        ""
-        (str "Your Hand (" (sort-order-labels sort-order) "):")
-        (str "  " hand-display)
-        ""]))))
+       (remove nil?
+         [""
+          "=== REGICIDE ==="
+          ""
+          "Current Enemy:"
+          (render-enemy current-enemy)
+          ""
+          (str "  Tavern: " (count tavern-deck) " cards"
+               "  |  Discard: " (count discard-pile) " cards"
+               "  |  Enemies remaining: " enemies-remaining)
+          ""
+          (render-phase-banner phase current-enemy)
+          ""
+          (str "Your Hand (" (sort-order-labels sort-order) "):")
+          (str "  " hand-display)
+          cursor-warning
+          ""])))))
 
 (defn render-selector-prompt [phase]
   (case phase
@@ -172,12 +188,6 @@
 
 (def ^:private dim "\u001b[2m")
 (def ^:private strikethrough "\u001b[9m")
-
-(def ^:private suit-power-labels
-  {:spades   "Reduce enemy attack"
-   :hearts   "Recycle from discard"
-   :diamonds "Draw cards"
-   :clubs    "Double damage"})
 
 (defn- render-cancelled-powers
   "Render lines for suit powers that were cancelled by enemy immunity."
