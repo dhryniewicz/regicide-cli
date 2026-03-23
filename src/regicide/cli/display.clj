@@ -120,7 +120,7 @@
                             (when (and card-at-cursor (= (:suit card-at-cursor) immune-suit))
                               (str "  " dim yellow "\u26a0 " (card/suit-symbols immune-suit) " "
                                    (suit-power-labels immune-suit)
-                                   " is immune against this enemy" ansi-reset))))]
+                                   " — blocked by enemy immunity" ansi-reset))))]
      (str/join "\n"
        (remove nil?
          [""

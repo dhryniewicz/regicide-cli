@@ -13,6 +13,18 @@
   (doseq [t texts]
     (when t (println t))))
 
+(defn- confirm-quit?
+  "Ask for quit confirmation. Returns true if user confirms."
+  []
+  (println "\n  Quit game? (y/n)")
+  (flush)
+  (loop []
+    (let [key (term/read-key)]
+      (cond
+        (or (= key \y) (= key \Y)) true
+        (or (= key \n) (= key \N) (= key :escape)) false
+        :else (recur)))))
+
 (defn- redraw!
   "Clear screen and redraw the game state with selector."
   [state selector-state action-info phase]
@@ -50,7 +62,7 @@
             (:escape :down) (recur cursor selected)
             (cond
               (= key \p) :sort
-              (= key \q) :quit
+              (= key \q) (if (confirm-quit?) :quit (recur cursor selected))
               (or (= key \h) (= key \?)) :help
               :else (recur cursor selected))))))))
 

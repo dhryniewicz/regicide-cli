@@ -50,7 +50,7 @@
         output (display/render-game-state state selector)]
     (is (string? output))
     (when immune-idx
-      (is (re-find #"immune" output)
+      (is (re-find #"immun" output)
           "Should show immune warning when cursor is on matching suit"))))
 
 (deftest render-action-result-with-active-powers-test
@@ -67,7 +67,7 @@
     (is (string? output))
     (is (re-find #"Damage dealt: 5" output))
     (is (re-find #"Reduced enemy attack" output))
-    (is (not (re-find #"immune" output))
+    (is (not (re-find #"immun" output))
         "Should not show immune when played suit differs from enemy suit")))
 
 (deftest render-action-result-with-cancelled-power-test
@@ -82,7 +82,7 @@
                 :played-suits #{:clubs}}
         output (display/render-action-result action)]
     (is (string? output))
-    (is (re-find #"immune" output)
+    (is (re-find #"immun" output)
         "Should show immune label for cancelled power")))
 
 (deftest render-action-result-discard-test
