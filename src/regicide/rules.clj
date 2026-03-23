@@ -11,22 +11,22 @@
    Legal combos (max total value 10 for multi-card plays):
    - Single card
    - Multiple cards of the same rank (pair/triple/quad)
-   - Ace(s) + card(s) of the same rank
-   - Ace + single non-ace card"
+   - Ace + exactly one non-ace card (animal companion)"
   [cards]
   (when (seq cards)
     (let [ranks (map :rank cards)
-          aces (filter #{1} ranks)
           non-aces (remove #{1} ranks)
-          ace-count (count aces)
-          total (reduce + ranks)]
+          ace-count (count (filter #{1} ranks))
+          total (reduce + (map card/card-value cards))]
       (cond
         (= 1 (count cards)) true
         (> total max-combo-value) false
+        ;; No aces: all same rank (pair/triple/quad)
         (and (zero? ace-count) (apply = ranks)) true
-        (and (pos? ace-count)
-             (or (empty? non-aces)
-                 (apply = non-aces))) true
+        ;; Aces only (multiple aces combo)
+        (and (pos? ace-count) (empty? non-aces)) true
+        ;; Exactly one ace + exactly one non-ace card
+        (and (= 1 ace-count) (= 1 (count non-aces))) true
         :else false))))
 
 (defn combo-value

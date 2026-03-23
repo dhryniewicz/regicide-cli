@@ -34,10 +34,14 @@
     (is (not (rules/valid-combo? [(card/make-card :hearts 1)
                                   (card/make-card :clubs 10)]))))
 
-  (testing "ace + pair within limit"
+  (testing "ace + pair is invalid"
+    (is (not (rules/valid-combo? [(card/make-card :hearts 1)
+                                  (card/make-card :clubs 4)
+                                  (card/make-card :spades 4)]))))
+
+  (testing "multiple aces is valid"
     (is (rules/valid-combo? [(card/make-card :hearts 1)
-                             (card/make-card :clubs 4)
-                             (card/make-card :spades 4)])))
+                             (card/make-card :clubs 1)])))
 
   (testing "single high card is always valid"
     (is (rules/valid-combo? [(card/make-card :hearts 10)])))
