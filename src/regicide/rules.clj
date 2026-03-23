@@ -2,31 +2,31 @@
   (:require [regicide.card :as card]
             [regicide.enemy :as enemy]))
 
-(def ^:private max-combo-value
-  "Maximum total value of a multi-card combo."
+(def ^:private max-same-rank-value
+  "Maximum total value for same-rank combos (pairs/triples/quads)."
   10)
 
 (defn valid-combo?
   "Validates a set of cards as a legal play.
-   Legal combos (max total value 10 for multi-card plays):
-   - Single card
-   - Multiple cards of the same rank (pair/triple/quad)
-   - Ace + exactly one non-ace card (animal companion)"
+   - Single card: always valid
+   - Ace companion: exactly one ace + one non-ace card, no value limit
+   - Same-rank combo: pair/triple/quad of same rank, total value <= 10"
   [cards]
   (when (seq cards)
     (let [ranks (map :rank cards)
           non-aces (remove #{1} ranks)
-          ace-count (count (filter #{1} ranks))
-          total (reduce + (map card/card-value cards))]
+          ace-count (count (filter #{1} ranks))]
       (cond
+        ;; Single card
         (= 1 (count cards)) true
-        (> total max-combo-value) false
-        ;; No aces: all same rank (pair/triple/quad)
-        (and (zero? ace-count) (apply = ranks)) true
-        ;; Aces only (multiple aces combo)
-        (and (pos? ace-count) (empty? non-aces)) true
-        ;; Exactly one ace + exactly one non-ace card
+        ;; Ace companion: one ace + one non-ace (no value limit)
         (and (= 1 ace-count) (= 1 (count non-aces))) true
+        ;; Multiple aces (same rank combo, always <= 10)
+        (and (pos? ace-count) (empty? non-aces)) true
+        ;; Same-rank combo: pair/triple/quad with value limit
+        (and (zero? ace-count)
+             (apply = ranks)
+             (<= (reduce + (map card/card-value cards)) max-same-rank-value)) true
         :else false))))
 
 (defn combo-value

@@ -26,13 +26,17 @@
                                   (card/make-card :clubs 5)
                                   (card/make-card :spades 5)]))))
 
-  (testing "ace + card within limit"
+  (testing "ace companion with low card"
     (is (rules/valid-combo? [(card/make-card :hearts 1)
                              (card/make-card :clubs 7)])))
 
-  (testing "ace + card exceeding limit"
-    (is (not (rules/valid-combo? [(card/make-card :hearts 1)
-                                  (card/make-card :clubs 10)]))))
+  (testing "ace companion with 10 (no value limit for companions)"
+    (is (rules/valid-combo? [(card/make-card :hearts 1)
+                             (card/make-card :clubs 10)])))
+
+  (testing "ace companion with face card from exact kill"
+    (is (rules/valid-combo? [(card/make-card :hearts 1)
+                             (card/make-card :diamonds 11)])))
 
   (testing "ace + pair is invalid"
     (is (not (rules/valid-combo? [(card/make-card :hearts 1)
