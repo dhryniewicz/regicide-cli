@@ -47,7 +47,7 @@ You can play multiple cards together if they share the same rank, as long as the
 - Pair of 6s = 12 damage (invalid, exceeds 10)
 - Triple of 3s = 9 damage (valid)
 
-**Aces** can be paired with any card(s) of the same rank (e.g., Ace + 8 = 9 damage).
+**Aces** can be paired with any single card as a companion (e.g., Ace + 8 = 9 damage, no value limit).
 
 ### Suit Powers
 
@@ -66,6 +66,16 @@ Each suit has a special power that activates when you play a card of that suit:
 
 If your damage equals the enemy's remaining health exactly, the defeated enemy card is placed on top of the draw pile instead of the discard pile, making it the next card you'll draw.
 
+### Multiplayer (Hot-Seat)
+
+Run with `clj -M:run 2` (or 3, 4). Players take turns on the same terminal — the screen clears between turns.
+
+**Yield**: Press `y` to pass your turn to the next player. You cannot yield if all other players have already yielded.
+
+**Jesters**: Set aside at game start (2p: 0, 3p: 1, 4p: 2). In multiplayer, playing a jester cancels the enemy's suit immunity, skips their attack, and lets you choose who goes next.
+
+In solo, 2 jesters are available. Press `j` to discard your hand and draw a fresh 8 cards.
+
 ### Controls
 
 All controls are instant (no Enter needed except to confirm selection):
@@ -75,6 +85,8 @@ All controls are instant (no Enter needed except to confirm selection):
 | `←` `→`       | Move cursor between cards                       |
 | `↑`           | Toggle selection on current card                |
 | `Enter`       | Play/discard selected cards                     |
+| `y`           | Yield turn (multiplayer only)                   |
+| `j`           | Use a jester                                    |
 | `p`           | Toggle hand sorting (unsorted / by suit / by rank) |
 | `h`           | Show help                                       |
 | `q`           | Quit                                            |
