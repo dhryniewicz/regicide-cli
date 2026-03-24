@@ -5,6 +5,7 @@
             [regicide.rules :as rules]))
 
 (def hand-sizes {1 8, 2 7, 3 6, 4 5})
+(def jester-counts {1 2, 2 0, 3 1, 4 2})
 
 ;; ---------------------------------------------------------------------------
 ;; Setup
@@ -27,27 +28,27 @@
         castle-deck (build-castle-deck face-cards)
         tavern-deck (deck/shuffle-deck player-cards)
         hand-size (hand-sizes num-players)
-        ;; Deal hands to each player
         [players tavern-after-deal]
         (reduce (fn [[players remaining] _]
                   (let [[hand remaining'] (deck/draw remaining hand-size)]
                     [(conj players {:hand hand}) remaining']))
                 [[] tavern-deck]
                 (range num-players))
-        ;; Flip first enemy
         first-enemy (first castle-deck)
         castle-rest (vec (rest castle-deck))]
-    {:castle-deck    castle-rest
-     :tavern-deck    tavern-after-deal
-     :discard-pile   []
-     :players        (vec players)
-     :current-player 0
-     :current-enemy  (enemy/make-enemy first-enemy)
-     :phase          :play-cards
-     :status         :in-progress
-     :num-players    num-players
-     :sort-order     :none
-     :jesters        2}))
+    {:castle-deck        castle-rest
+     :tavern-deck        tavern-after-deal
+     :discard-pile       []
+     :players            (vec players)
+     :current-player     0
+     :current-enemy      (enemy/make-enemy first-enemy)
+     :phase              :play-cards
+     :status             :in-progress
+     :num-players        num-players
+     :sort-order         :none
+     :jesters            (jester-counts num-players)
+     :consecutive-yields 0
+     :player-changed     false}))
 
 ;; ---------------------------------------------------------------------------
 ;; Helpers
@@ -65,8 +66,12 @@
   (let [idx-set (set indices)]
     (vec (keep-indexed (fn [i x] (when-not (idx-set i) x)) v))))
 
-(defn- next-player [state]
-  (update state :current-player #(mod (inc %) (:num-players state))))
+(defn- advance-player
+  "Move to the next player and set the player-changed flag."
+  [state]
+  (-> state
+      (update :current-player #(mod (inc %) (:num-players state)))
+      (assoc :player-changed true)))
 
 ;; ---------------------------------------------------------------------------
 ;; Core transitions
@@ -77,7 +82,6 @@
    Returns updated state or {:error msg}."
   [state card-indices]
   (let [hand (current-hand state)
-        ;; Validate indices
         _ (when (some #(or (neg? %) (>= % (count hand))) card-indices)
             (throw (ex-info "Invalid card index" {})))
         cards (mapv hand card-indices)]
@@ -116,13 +120,14 @@
                         (update-current-hand into drawn)))
 
             ;; 6. Move played cards to discard
-            state (update state :discard-pile into cards)]
+            state (update state :discard-pile into cards)
+
+            ;; Reset consecutive yields (someone played)
+            state (assoc state :consecutive-yields 0)]
 
         ;; 7. Check if enemy defeated
         (if (enemy/defeated? (:current-enemy state))
           (let [defeated-card (get-in state [:current-enemy :card])
-                ;; Exact kill: enemy goes on top of tavern deck (next draw)
-                ;; Otherwise: enemy goes to discard pile
                 state (if exact-kill
                         (update state :tavern-deck #(vec (cons defeated-card %)))
                         (update state :discard-pile conj defeated-card))]
@@ -134,12 +139,12 @@
                     (assoc :castle-deck (vec (rest (:castle-deck state))))
                     (assoc :current-enemy (enemy/make-enemy next-enemy-card))
                     (assoc :phase :play-cards)
-                    next-player))))
+                    advance-player))))
           ;; Enemy survives - check if attack is 0 (skip damage phase)
           (if (zero? (get-in state [:current-enemy :attack]))
             (-> state
                 (assoc :phase :play-cards)
-                next-player)
+                advance-player)
             (assoc state :phase :suffer-damage)))))))
 
 (defn suffer-damage
@@ -158,30 +163,76 @@
           (update-current-hand remove-indices card-indices)
           (update :discard-pile into cards)
           (assoc :phase :play-cards)
-          next-player))))
+          advance-player))))
+
+;; ---------------------------------------------------------------------------
+;; Yield (multiplayer only)
+;; ---------------------------------------------------------------------------
+
+(defn yield
+  "Yield: pass turn without playing. Only in multiplayer.
+   Cannot yield if all other players have already yielded consecutively."
+  [state]
+  (cond
+    (= 1 (:num-players state))
+    {:error "Cannot yield in solo mode."}
+
+    (>= (:consecutive-yields state) (dec (:num-players state)))
+    {:error "Cannot yield — all other players have already yielded."}
+
+    :else
+    (-> state
+        (update :consecutive-yields inc)
+        (assoc :phase :play-cards)
+        advance-player)))
+
+;; ---------------------------------------------------------------------------
+;; Jesters
+;; ---------------------------------------------------------------------------
 
 (defn use-jester
-  "Use a jester: discard entire hand and draw a fresh hand of max size.
+  "Solo jester: discard entire hand and draw a fresh hand of max size.
    Can be used before playing cards or before suffering damage.
-   Does not count as drawing (bypasses diamond immunity).
-   Returns updated state or {:error msg}."
+   Does not count as drawing (bypasses diamond immunity)."
   [state]
   (if (zero? (:jesters state))
     {:error "No jesters remaining!"}
     (let [hand (current-hand state)
           hand-limit (hand-sizes (:num-players state))
-          ;; Discard current hand
           state (-> state
                     (update :discard-pile into hand)
                     (update-current-hand (constantly [])))
-          ;; Draw fresh hand
           draw-count (min hand-limit (count (:tavern-deck state)))
-          [drawn remaining] (deck/draw (:tavern-deck state) draw-count)
-          state (-> state
-                    (assoc :tavern-deck remaining)
-                    (update-current-hand into drawn)
-                    (update :jesters dec))]
-      state)))
+          [drawn remaining] (deck/draw (:tavern-deck state) draw-count)]
+      (-> state
+          (assoc :tavern-deck remaining)
+          (update-current-hand into drawn)
+          (update :jesters dec)))))
+
+(defn play-jester
+  "Multiplayer jester: cancel enemy immunity, deal 0 damage, skip enemy attack.
+   Sets phase to :choose-next-player so the current player picks who goes next."
+  [state]
+  (if (zero? (:jesters state))
+    {:error "No jesters remaining!"}
+    (-> state
+        (update :jesters dec)
+        (assoc :consecutive-yields 0)
+        (assoc :phase :choose-next-player))))
+
+(defn choose-next-player
+  "After a multiplayer jester, the playing player picks who goes next."
+  [state player-idx]
+  (if (or (neg? player-idx) (>= player-idx (:num-players state)))
+    {:error "Invalid player number."}
+    (-> state
+        (assoc :current-player player-idx)
+        (assoc :phase :play-cards)
+        (assoc :player-changed true))))
+
+;; ---------------------------------------------------------------------------
+;; Checks
+;; ---------------------------------------------------------------------------
 
 (defn check-can-survive
   "Check if the current player can survive the enemy's attack.
@@ -195,11 +246,18 @@
       state)))
 
 (defn check-can-play
-  "Check if the current player has any cards to play.
-   In solo mode with no cards and no ability to yield, it's a loss."
+  "Check if the current player can act.
+   Solo with empty hand = loss.
+   Multiplayer with empty hand = auto-yield (or loss if all stuck)."
   [state]
   (if (and (= :play-cards (:phase state))
-           (empty? (current-hand state))
-           (= 1 (:num-players state)))
-    (assoc state :status :lost :phase :game-over)
+           (empty? (current-hand state)))
+    (if (= 1 (:num-players state))
+      (assoc state :status :lost :phase :game-over)
+      ;; Multiplayer: auto-yield
+      (let [result (yield state)]
+        (if (:error result)
+          ;; Everyone stuck with no cards
+          (assoc state :status :lost :phase :game-over)
+          (assoc result :auto-yielded true))))
     state))
