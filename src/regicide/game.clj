@@ -46,7 +46,8 @@
      :phase          :play-cards
      :status         :in-progress
      :num-players    num-players
-     :sort-order     :none}))
+     :sort-order     :none
+     :jesters        2}))
 
 ;; ---------------------------------------------------------------------------
 ;; Helpers
@@ -158,6 +159,29 @@
           (update :discard-pile into cards)
           (assoc :phase :play-cards)
           next-player))))
+
+(defn use-jester
+  "Use a jester: discard entire hand and draw a fresh hand of max size.
+   Can be used before playing cards or before suffering damage.
+   Does not count as drawing (bypasses diamond immunity).
+   Returns updated state or {:error msg}."
+  [state]
+  (if (zero? (:jesters state))
+    {:error "No jesters remaining!"}
+    (let [hand (current-hand state)
+          hand-limit (hand-sizes (:num-players state))
+          ;; Discard current hand
+          state (-> state
+                    (update :discard-pile into hand)
+                    (update-current-hand (constantly [])))
+          ;; Draw fresh hand
+          draw-count (min hand-limit (count (:tavern-deck state)))
+          [drawn remaining] (deck/draw (:tavern-deck state) draw-count)
+          state (-> state
+                    (assoc :tavern-deck remaining)
+                    (update-current-hand into drawn)
+                    (update :jesters dec))]
+      state)))
 
 (defn check-can-survive
   "Check if the current player can survive the enemy's attack.

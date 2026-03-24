@@ -62,6 +62,7 @@
             (:escape :down) (recur cursor selected)
             (cond
               (= key \p) :sort
+              (= key \j) :jester
               (= key \q) (if (confirm-quit?) :quit (recur cursor selected))
               (or (= key \h) (= key \?)) :help
               :else (recur cursor selected))))))))
@@ -77,6 +78,17 @@
           (nil? result) nil
           (= :quit result) nil
           (= :sort result) [(toggle-sort state) action-info]
+          (= :jester result)
+          (let [jester-result (game/use-jester state)]
+            (if (:error jester-result)
+              (do (print term/clear-screen)
+                  (show (display/render-game-state state))
+                  (show (str "\n  " (:error jester-result)))
+                  (println "\n  Press any key...")
+                  (flush)
+                  (term/read-key)
+                  [state nil])
+              [jester-result {:jester-used true}]))
           (= :help result)
           (do (print term/clear-screen)
               (show (display/render-help))
@@ -125,6 +137,17 @@
           (nil? result) nil
           (= :quit result) nil
           (= :sort result) [(toggle-sort state) action-info]
+          (= :jester result)
+          (let [jester-result (game/use-jester state)]
+            (if (:error jester-result)
+              (do (print term/clear-screen)
+                  (show (display/render-game-state state))
+                  (show (str "\n  " (:error jester-result)))
+                  (println "\n  Press any key...")
+                  (flush)
+                  (term/read-key)
+                  [state action-info])
+              [jester-result {:jester-used true}]))
           (= :help result)
           (do (print term/clear-screen)
               (show (display/render-help))

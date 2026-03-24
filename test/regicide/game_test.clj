@@ -68,3 +68,18 @@
                :status :in-progress}
         result (game/check-can-survive state)]
     (is (= :lost (:status result)))))
+
+(deftest use-jester-test
+  (let [state (game/new-game 1)]
+    (testing "jester discards hand and draws fresh"
+      (let [old-hand (game/current-hand state)
+            result (game/use-jester state)]
+        (is (not (:error result)))
+        (is (= 2 (:jesters state)))
+        (is (= 1 (:jesters result)))
+        (is (= 8 (count (game/current-hand result))))))
+
+    (testing "no jesters remaining"
+      (let [state (assoc state :jesters 0)
+            result (game/use-jester state)]
+        (is (:error result))))))

@@ -196,7 +196,8 @@
           ""
           (str "  Tavern: " (count tavern-deck) " cards"
                "  |  Discard: " (count discard-pile) " cards"
-               "  |  Enemies remaining: " enemies-remaining)
+               "  |  Enemies remaining: " enemies-remaining
+               "  |  Jesters: " (or (:jesters state) 0))
           ""
           (render-phase-banner phase current-enemy)
           ""
@@ -208,8 +209,8 @@
 
 (defn render-selector-prompt [phase]
   (case phase
-    :play-cards    "\u2190\u2192 move  \u2191 select  Enter play  p sort  h help  q quit"
-    :suffer-damage "\u2190\u2192 move  \u2191 select  Enter discard  p sort  h help  q quit"))
+    :play-cards    "\u2190\u2192 move  \u2191 select  Enter play  j jester  p sort  h help  q quit"
+    :suffer-damage "\u2190\u2192 move  \u2191 select  Enter discard  j jester  p sort  h help  q quit"))
 
 (defn render-help []
   (str/join "\n"
@@ -220,6 +221,7 @@
      "    \u2190 \u2192     - Move cursor left/right"
      "    \u2191        - Toggle card selection"
      "    Enter    - Play/discard selected cards"
+     "    j        - Use a jester (discard hand, draw fresh)"
      "    p        - Toggle hand sorting (unsorted -> by suit -> by rank)"
      "    h        - Show this help"
      "    q        - Quit the game"
@@ -265,10 +267,12 @@
 
 (defn render-action-result [action-info]
   (when action-info
-    (let [immune (:immune-suit action-info)
-          played-suits (:played-suits action-info)
-          lines (concat
-                  [(when-let [cards (:played action-info)]
+    (if (:jester-used action-info)
+      (str "  " yellow "\ud83c\udccf Jester used! Hand refreshed." ansi-reset)
+      (let [immune (:immune-suit action-info)
+            played-suits (:played-suits action-info)
+            lines (concat
+                    [(when-let [cards (:played action-info)]
                      (str "  Played: " (str/join " " (map card/card-label cards))))
                    (when-let [dmg (:damage action-info)]
                      (str "  Damage dealt: " dmg))
@@ -285,7 +289,7 @@
                        "  >> Enemy defeated!"))
                    (when-let [discarded (:discarded action-info)]
                      (str "  Discarded to absorb damage: " (str/join " " (map card/card-label discarded))))])]
-      (str/join "\n" (remove nil? lines)))))
+        (str/join "\n" (remove nil? lines))))))
 
 (defn render-enemy-defeated
   "Render an interstitial screen when an enemy is defeated."
