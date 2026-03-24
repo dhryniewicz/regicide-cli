@@ -2,3 +2,8 @@
 .nrepl-port
 target/
 *.class
+
+# Firebase / Cloud Functions
+functions/node_modules/
+functions/dist/
+functions/.shadow-cljs/
