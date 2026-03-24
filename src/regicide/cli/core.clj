@@ -32,7 +32,7 @@
   (show (display/render-game-state state selector-state))
   (when action-info
     (show (display/render-action-result action-info)))
-  (println (display/render-selector-prompt phase))
+  (println (display/render-selector-prompt phase (> (:num-players state) 1)))
   (flush))
 
 (defn- card-select-loop

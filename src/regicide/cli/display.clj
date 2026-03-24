@@ -150,6 +150,42 @@
 
       nil)))
 
+(defn- render-other-players
+  "Show hand counts for other players (not their cards)."
+  [state]
+  (let [current (:current-player state)
+        parts (for [i (range (:num-players state))
+                    :when (not= i current)]
+                (str "Player " (inc i) ": "
+                     (count (get-in state [:players i :hand])) " cards"))]
+    (str "  " (str/join "  |  " parts) "\n")))
+
+(defn render-turn-transition
+  "Render the hot-seat transition screen between players."
+  [player-num]
+  (str/join "\n"
+    [""
+     ""
+     (str "  " term/bold "=== PLAYER " player-num "'s TURN ===" term/reset)
+     ""
+     "  Press any key when ready..."]))
+
+(defn render-player-chooser
+  "Render a player picker for the multiplayer jester choose-next-player effect."
+  [state]
+  (let [current (:current-player state)
+        lines (for [i (range (:num-players state))
+                    :when (not= i current)]
+                (str "  [" (inc i) "] Player " (inc i)
+                     " (" (count (get-in state [:players i :hand])) " cards)"))]
+    (str/join "\n"
+      (concat
+        [""
+         (str "  " cyan "Choose who goes next:" ansi-reset)
+         ""]
+        lines
+        [""]))))
+
 (defn- render-phase-banner [phase enemy]
   (let [attack (:attack enemy)]
     (case phase
@@ -201,16 +237,24 @@
           ""
           (render-phase-banner phase current-enemy)
           ""
-          (str "Your Hand (" (sort-order-labels sort-order) "):")
+          (when (> (:num-players state) 1)
+            (render-other-players state))
+          (str (if (> (:num-players state) 1)
+                 (str "Player " (inc (:current-player state)) "'s Hand")
+                 "Your Hand")
+               " (" (sort-order-labels sort-order) "):")
           (str "  " hand-display)
           cursor-warning
           selection-preview
           ""])))))
 
-(defn render-selector-prompt [phase]
-  (case phase
-    :play-cards    "\u2190\u2192 move  \u2191 select  Enter play  j jester  p sort  h help  q quit"
-    :suffer-damage "\u2190\u2192 move  \u2191 select  Enter discard  j jester  p sort  h help  q quit"))
+(defn render-selector-prompt [phase multiplayer?]
+  (let [base (str "\u2190\u2192 move  \u2191 select  Enter "
+                  (case phase :play-cards "play" :suffer-damage "discard" "?"))
+        yield-part (when (and multiplayer? (= phase :play-cards)) "  y yield")
+        jester-part "  j jester"
+        rest-part "  p sort  h help  q quit"]
+    (str base (or yield-part "") jester-part rest-part)))
 
 (defn render-help []
   (str/join "\n"
@@ -221,7 +265,8 @@
      "    \u2190 \u2192     - Move cursor left/right"
      "    \u2191        - Toggle card selection"
      "    Enter    - Play/discard selected cards"
-     "    j        - Use a jester (discard hand, draw fresh)"
+     "    y        - Yield turn (multiplayer only, pass to next player)"
+     "    j        - Use a jester (solo: refresh hand; multiplayer: cancel immunity)"
      "    p        - Toggle hand sorting (unsorted -> by suit -> by rank)"
      "    h        - Show this help"
      "    q        - Quit the game"

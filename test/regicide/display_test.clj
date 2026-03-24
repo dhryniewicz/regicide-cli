@@ -143,5 +143,9 @@
     (is (re-find #"(?i)regicide" output))))
 
 (deftest render-selector-prompt-test
-  (is (re-find #"play" (display/render-selector-prompt :play-cards)))
-  (is (re-find #"discard" (display/render-selector-prompt :suffer-damage))))
+  (is (re-find #"play" (display/render-selector-prompt :play-cards false)))
+  (is (re-find #"discard" (display/render-selector-prompt :suffer-damage false)))
+  (is (re-find #"yield" (display/render-selector-prompt :play-cards true))
+      "multiplayer play prompt should include yield")
+  (is (not (re-find #"yield" (display/render-selector-prompt :play-cards false)))
+      "solo play prompt should not include yield"))
