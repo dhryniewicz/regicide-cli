@@ -1,6 +1,8 @@
-# Regicide
+# Regicide (CLI)
 
-A CLI-based clone of the cooperative card game [Regicide](https://www.badgersfrommars.com/regicide), built in Clojure.
+An unofficial, fan-made CLI implementation of the cooperative card game [Regicide](https://www.badgersfrommars.com/regicide), built in Clojure as a learning project.
+
+> **Disclaimer**: This project is not affiliated with or endorsed by [Badgers From Mars](https://www.badgersfrommars.com/), the creators of Regicide. If you enjoy this game, please support the original creators by [purchasing the official game](https://www.badgersfrommars.com/regicide).
 
 ## Requirements
 
@@ -90,3 +92,7 @@ All controls are instant (no Enter needed except to confirm selection):
 | `p`           | Toggle hand sorting (unsorted / by suit / by rank) |
 | `h`           | Show help                                       |
 | `q`           | Quit                                            |
+
+## License
+
+MIT — see [LICENSE](LICENSE).
