@@ -130,7 +130,7 @@
                               " — blocked" ansi-reset))
                        (cond
                          exact (str "  " green term/bold
-                                    "\u2192 EXACT KILL! (enemy goes to hand)" ansi-reset)
+                                    "\u2192 EXACT KILL! (enemy goes to top of draw pile)" ansi-reset)
                          kills (str "  " green term/bold
                                     "\u2192 Defeats enemy (" damage "/" health ")" ansi-reset)
                          :else (str "  " dim
@@ -231,7 +231,7 @@
      (str "    " (card/suit-symbols :clubs) " Clubs    - Double damage")
      ""
      "  Combos: Play multiple cards of the same rank, or Ace + card(s)"
-     "  Exact kill: If damage equals remaining health exactly, enemy goes to your hand"
+     "  Exact kill: If damage equals remaining health exactly, enemy goes on top of draw pile"
      ""
      "  Press any key to continue..."]))
 
@@ -281,7 +281,7 @@
                   (render-cancelled-powers immune played-suits)
                   [(when (:enemy-defeated action-info)
                      (if (:exact-kill action-info)
-                       "  >> Enemy defeated! (Exact kill - enemy card added to your hand!)"
+                       "  >> Enemy defeated! (Exact kill - enemy placed on top of draw pile!)"
                        "  >> Enemy defeated!"))
                    (when-let [discarded (:discarded action-info)]
                      (str "  Discarded to absorb damage: " (str/join " " (map card/card-label discarded))))])]

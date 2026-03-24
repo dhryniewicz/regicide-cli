@@ -120,10 +120,10 @@
         ;; 7. Check if enemy defeated
         (if (enemy/defeated? (:current-enemy state))
           (let [defeated-card (get-in state [:current-enemy :card])
-                ;; Remove defeated enemy card from discard (it was added with played cards? No - it wasn't)
-                ;; The defeated enemy card needs to go to hand (exact kill) or discard
+                ;; Exact kill: enemy goes on top of tavern deck (next draw)
+                ;; Otherwise: enemy goes to discard pile
                 state (if exact-kill
-                        (update-current-hand state conj defeated-card)
+                        (update state :tavern-deck #(vec (cons defeated-card %)))
                         (update state :discard-pile conj defeated-card))]
             ;; Flip next enemy or win
             (if (empty? (:castle-deck state))

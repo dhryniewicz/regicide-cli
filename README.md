@@ -64,7 +64,7 @@ Each suit has a special power that activates when you play a card of that suit:
 
 ### Exact Kill
 
-If your damage equals the enemy's remaining health exactly, the defeated enemy card goes into your hand instead of the discard pile.
+If your damage equals the enemy's remaining health exactly, the defeated enemy card is placed on top of the draw pile instead of the discard pile, making it the next card you'll draw.
 
 ### Controls
 
