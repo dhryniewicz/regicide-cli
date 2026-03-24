@@ -13,9 +13,10 @@
   (doseq [t texts]
     (when t (println t))))
 
-(defn- confirm-quit?
-  "Ask for quit confirmation. Returns true if user confirms."
-  []
+(defn- multiplayer? [state]
+  (> (:num-players state) 1))
+
+(defn- confirm-quit? []
   (println "\n  Quit game? (y/n)")
   (flush)
   (loop []
@@ -25,19 +26,54 @@
         (or (= key \n) (= key \N) (= key :escape)) false
         :else (recur)))))
 
-(defn- redraw!
-  "Clear screen and redraw the game state with selector."
-  [state selector-state action-info phase]
+(defn- show-error! [state msg]
+  (print term/clear-screen)
+  (show (display/render-game-state state))
+  (show (str "\n  " msg))
+  (println "\n  Press any key...")
+  (flush)
+  (term/read-key))
+
+(defn- redraw! [state selector-state action-info phase]
   (print term/clear-screen)
   (show (display/render-game-state state selector-state))
   (when action-info
     (show (display/render-action-result action-info)))
-  (println (display/render-selector-prompt phase (> (:num-players state) 1)))
+  (println (display/render-selector-prompt phase (multiplayer? state)))
   (flush))
+
+(defn- hot-seat-transition!
+  "Show transition screen between players if needed."
+  [state]
+  (if (and (multiplayer? state) (:player-changed state))
+    (do (print term/clear-screen)
+        (show (display/render-turn-transition (inc (:current-player state))))
+        (flush)
+        (term/read-key)
+        (assoc state :player-changed false))
+    (assoc state :player-changed false)))
+
+(defn- player-chooser-loop!
+  "Let the current player choose who goes next (for multiplayer jester)."
+  [state]
+  (print term/clear-screen)
+  (show (display/render-game-state state))
+  (show (display/render-player-chooser state))
+  (flush)
+  (loop []
+    (let [key (term/read-key)]
+      (if (and (char? key) (Character/isDigit ^char key))
+        (let [idx (dec (Character/digit ^char key 10))]
+          (if (and (>= idx 0)
+                   (< idx (:num-players state))
+                   (not= idx (:current-player state)))
+            (game/choose-next-player state idx)
+            (recur)))
+        (recur)))))
 
 (defn- card-select-loop
   "Interactive card selection with arrow keys.
-   Returns selected original indices as a vec, or :quit, or :help."
+   Returns selected original indices as a vec, or a keyword command."
   [state phase action-info]
   (let [hand (game/current-hand state)
         hand-size (count hand)]
@@ -63,48 +99,62 @@
             (cond
               (= key \p) :sort
               (= key \j) :jester
+              (and (= key \y) (= phase :play-cards) (multiplayer? state)) :yield
               (= key \q) (if (confirm-quit?) :quit (recur cursor selected))
               (or (= key \h) (= key \?)) :help
               :else (recur cursor selected))))))))
+
+(defn- handle-jester [state action-info]
+  (if (multiplayer? state)
+    ;; Multiplayer: cancel immunity, skip attack, choose next player
+    (let [result (game/play-jester state)]
+      (if (:error result)
+        (do (show-error! state (:error result)) [state action-info])
+        (let [next-state (player-chooser-loop! result)]
+          (if (:error next-state)
+            (do (show-error! state (:error next-state)) [state action-info])
+            [next-state {:jester-used true}]))))
+    ;; Solo: refresh hand
+    (let [result (game/use-jester state)]
+      (if (:error result)
+        (do (show-error! state (:error result)) [state nil])
+        [result {:jester-used true}]))))
 
 (defn- play-phase
   "Handle the play-cards phase. Returns [new-state action-info] or nil on quit."
   [state action-info]
   (let [hand (game/current-hand state)]
     (if (empty? hand)
-      [(game/check-can-play state) nil]
+      (let [checked (game/check-can-play state)]
+        (when (:auto-yielded checked)
+          (print term/clear-screen)
+          (show (str "\n  Player " (inc (:current-player state))
+                     " has no cards — auto-yielding."))
+          (println "\n  Press any key...")
+          (flush)
+          (term/read-key))
+        [checked nil])
       (let [result (card-select-loop state :play-cards action-info)]
         (cond
           (nil? result) nil
           (= :quit result) nil
           (= :sort result) [(toggle-sort state) action-info]
-          (= :jester result)
-          (let [jester-result (game/use-jester state)]
-            (if (:error jester-result)
-              (do (print term/clear-screen)
-                  (show (display/render-game-state state))
-                  (show (str "\n  " (:error jester-result)))
-                  (println "\n  Press any key...")
-                  (flush)
-                  (term/read-key)
-                  [state nil])
-              [jester-result {:jester-used true}]))
+          (= :yield result)
+          (let [yield-result (game/yield state)]
+            (if (:error yield-result)
+              (do (show-error! state (:error yield-result)) [state action-info])
+              [yield-result nil]))
+          (= :jester result) (handle-jester state action-info)
           (= :help result)
           (do (print term/clear-screen)
               (show (display/render-help))
               (term/read-key)
               [state action-info])
 
-          :else ;; vec of indices
+          :else
           (let [play-result (game/play-cards state result)]
             (if (:error play-result)
-              (do (print term/clear-screen)
-                  (show (display/render-game-state state))
-                  (show (str "\n  " (:error play-result)))
-                  (println "\n  Press any key...")
-                  (flush)
-                  (term/read-key)
-                  [state nil])
+              (do (show-error! state (:error play-result)) [state nil])
               (let [cards (mapv (game/current-hand state) result)
                     effects (rules/suit-effects cards (:current-enemy state))
                     damage (rules/total-damage cards (:current-enemy state))
@@ -138,16 +188,11 @@
           (= :quit result) nil
           (= :sort result) [(toggle-sort state) action-info]
           (= :jester result)
-          (let [jester-result (game/use-jester state)]
-            (if (:error jester-result)
-              (do (print term/clear-screen)
-                  (show (display/render-game-state state))
-                  (show (str "\n  " (:error jester-result)))
-                  (println "\n  Press any key...")
-                  (flush)
-                  (term/read-key)
-                  [state action-info])
-              [jester-result {:jester-used true}]))
+          (if (multiplayer? state)
+            ;; Multiplayer jester only during play phase
+            (do (show-error! state "Jesters can only be played during the attack phase.")
+                [state action-info])
+            (handle-jester state action-info))
           (= :help result)
           (do (print term/clear-screen)
               (show (display/render-help))
@@ -157,13 +202,7 @@
           :else
           (let [discard-result (game/suffer-damage state result)]
             (if (:error discard-result)
-              (do (print term/clear-screen)
-                  (show (display/render-game-state state))
-                  (show (str "\n  " (:error discard-result)))
-                  (println "\n  Press any key...")
-                  (flush)
-                  (term/read-key)
-                  [state action-info])
+              (do (show-error! state (:error discard-result)) [state action-info])
               (let [hand (game/current-hand state)
                     cards (mapv hand result)
                     new-action {:discarded cards}]
@@ -173,35 +212,37 @@
   (loop [state state
          action-info nil]
     (when (= :in-progress (:status state))
-      (let [[new-state new-action]
-            (case (:phase state)
-              :play-cards    (play-phase state action-info)
-              :suffer-damage (discard-phase state action-info)
-              :game-over     nil)]
-        (cond
-          (nil? new-state)
-          (do (print term/clear-screen) (flush)
-              (show "\nThanks for playing!"))
+      ;; Hot-seat transition between players
+      (let [state (hot-seat-transition! state)]
+        (let [[new-state new-action]
+              (case (:phase state)
+                :play-cards    (play-phase state action-info)
+                :suffer-damage (discard-phase state action-info)
+                :game-over     nil)]
+          (cond
+            (nil? new-state)
+            (do (print term/clear-screen) (flush)
+                (show "\nThanks for playing!"))
 
-          (#{:won :lost} (:status new-state))
-          (do (print term/clear-screen)
-              (show (display/render-game-state new-state))
-              (when new-action
-                (show (display/render-action-result new-action)))
-              (show (display/render-game-over new-state)))
+            (#{:won :lost} (:status new-state))
+            (do (print term/clear-screen)
+                (show (display/render-game-state new-state))
+                (when new-action
+                  (show (display/render-action-result new-action)))
+                (show (display/render-game-over new-state)))
 
-          :else
-          (do
-            (when (:enemy-defeated new-action)
-              (let [enemies-left (inc (count (:castle-deck new-state)))
-                    next-enemy (:current-enemy new-state)]
-                (print term/clear-screen)
-                (show (display/render-enemy-defeated new-action
-                        (get-in state [:current-enemy :card])
-                        next-enemy enemies-left))
-                (flush)
-                (term/read-key)))
-            (recur new-state nil)))))))
+            :else
+            (do
+              (when (:enemy-defeated new-action)
+                (let [enemies-left (inc (count (:castle-deck new-state)))
+                      next-enemy (:current-enemy new-state)]
+                  (print term/clear-screen)
+                  (show (display/render-enemy-defeated new-action
+                          (get-in state [:current-enemy :card])
+                          next-enemy enemies-left))
+                  (flush)
+                  (term/read-key)))
+              (recur new-state nil))))))))
 
 (defn -main [& args]
   (let [num-players (if (first args)
