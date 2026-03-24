@@ -84,10 +84,11 @@
               [r (str "  P" pi ": " (str/join "+" (map card/card-label (:cards play)))
                       " → " (:damage play) " dmg"
                       (when (>= (:damage play) (:health enemy)) " KILL!"))]))
-          ;; No play found
+          ;; No play found (shouldn't happen with non-empty hand)
           (if (> (:num-players state) 1)
             [(game/yield state) (str "  P" pi ": Yield")]
-            [state (str "  P" pi ": Stuck")])))
+            [(assoc state :status :lost :phase :game-over)
+             (str "  P" pi ": Stuck — LOST!")])))
 
       :suffer-damage
       (let [attack (get-in state [:current-enemy :attack])]
@@ -100,7 +101,8 @@
           (if (pos? (:jesters state))
             (let [r (game/use-jester state)]
               [r (str "  P" pi ": Jester to survive " attack " dmg")])
-            [state (str "  P" pi ": Can't absorb " attack " LOST")])
+            [(assoc state :status :lost :phase :game-over)
+             (str "  P" pi ": Can't absorb " attack " — LOST!")])
 
           :else
           (if-let [indices (find-min-discard hand attack)]
