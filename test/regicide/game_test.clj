@@ -62,12 +62,23 @@
         (is (= :play-cards (:phase discard-result)))))))
 
 (deftest check-can-survive-test
-  (let [state {:current-enemy {:attack 100}
-               :players [{:hand [(card/make-card :hearts 2)]}]
-               :current-player 0
-               :status :in-progress}
-        result (game/check-can-survive state)]
-    (is (= :lost (:status result)))))
+  (testing "lost when can't absorb and no jesters"
+    (let [state {:current-enemy {:attack 100}
+                 :players [{:hand [(card/make-card :hearts 2)]}]
+                 :current-player 0
+                 :status :in-progress
+                 :jesters 0}
+          result (game/check-can-survive state)]
+      (is (= :lost (:status result)))))
+
+  (testing "not lost when can't absorb but has jesters"
+    (let [state {:current-enemy {:attack 100}
+                 :players [{:hand [(card/make-card :hearts 2)]}]
+                 :current-player 0
+                 :status :in-progress
+                 :jesters 1}
+          result (game/check-can-survive state)]
+      (is (= :in-progress (:status result))))))
 
 (deftest use-jester-test
   (let [state (game/new-game 1)]

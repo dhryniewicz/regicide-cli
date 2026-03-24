@@ -125,15 +125,28 @@
   [state action-info]
   (let [hand (game/current-hand state)]
     (if (empty? hand)
-      (let [checked (game/check-can-play state)]
-        (when (:auto-yielded checked)
-          (print term/clear-screen)
-          (show (str "\n  Player " (inc (:current-player state))
-                     " has no cards — auto-yielding."))
-          (println "\n  Press any key...")
-          (flush)
-          (term/read-key))
-        [checked nil])
+      (if (pos? (:jesters state))
+        ;; Empty hand but jester available — prompt to use it
+        (do (print term/clear-screen)
+            (show (display/render-game-state state))
+            (show (str "\n  No cards in hand! Press j to use a jester, or q to quit."))
+            (flush)
+            (loop []
+              (let [key (term/read-key)]
+                (cond
+                  (= key \j) (handle-jester state action-info)
+                  (= key \q) (if (confirm-quit?) nil (recur))
+                  :else (recur)))))
+        ;; No jesters either — check for loss or auto-yield
+        (let [checked (game/check-can-play state)]
+          (when (:auto-yielded checked)
+            (print term/clear-screen)
+            (show (str "\n  Player " (inc (:current-player state))
+                       " has no cards — auto-yielding."))
+            (println "\n  Press any key...")
+            (flush)
+            (term/read-key))
+          [checked nil]))
       (let [result (card-select-loop state :play-cards action-info)]
         (cond
           (nil? result) nil
@@ -180,8 +193,26 @@
   "Handle the suffer-damage phase. Returns [new-state action-info] or nil on quit."
   [state action-info]
   (let [state (game/check-can-survive state)]
-    (if (= :lost (:status state))
+    (cond
+      (= :lost (:status state))
       [state nil]
+
+      ;; Can't absorb but have a jester — prompt to use it
+      (and (not (rules/can-absorb-damage? (game/current-hand state)
+                                           (get-in state [:current-enemy :attack])))
+           (pos? (:jesters state)))
+      (do (print term/clear-screen)
+          (show (display/render-game-state state))
+          (show (str "\n  Not enough cards to survive! Press j to use a jester, or q to quit."))
+          (flush)
+          (loop []
+            (let [key (term/read-key)]
+              (cond
+                (= key \j) (handle-jester state action-info)
+                (= key \q) (if (confirm-quit?) nil (recur))
+                :else (recur)))))
+
+      :else
       (let [result (card-select-loop state :suffer-damage action-info)]
         (cond
           (nil? result) nil

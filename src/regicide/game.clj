@@ -236,28 +236,31 @@
 
 (defn check-can-survive
   "Check if the current player can survive the enemy's attack.
-   Returns the state with :status :lost if they cannot."
+   Not a loss if jesters are available (player can use one to refresh hand)."
   [state]
   (let [hand (current-hand state)
         attack (get-in state [:current-enemy :attack])]
     (if (and (pos? attack)
-             (not (rules/can-absorb-damage? hand attack)))
+             (not (rules/can-absorb-damage? hand attack))
+             (zero? (:jesters state)))
       (assoc state :status :lost :phase :game-over)
       state)))
 
 (defn check-can-play
   "Check if the current player can act.
-   Solo with empty hand = loss.
-   Multiplayer with empty hand = auto-yield (or loss if all stuck)."
+   Not a loss if jesters are available (player can use one to refresh hand).
+   Multiplayer with empty hand = auto-yield (or loss if all stuck and no jesters)."
   [state]
   (if (and (= :play-cards (:phase state))
            (empty? (current-hand state)))
-    (if (= 1 (:num-players state))
-      (assoc state :status :lost :phase :game-over)
-      ;; Multiplayer: auto-yield
-      (let [result (yield state)]
-        (if (:error result)
-          ;; Everyone stuck with no cards
-          (assoc state :status :lost :phase :game-over)
-          (assoc result :auto-yielded true))))
+    (if (pos? (:jesters state))
+      ;; Has jesters — don't auto-lose or auto-yield, let player use jester
+      state
+      (if (= 1 (:num-players state))
+        (assoc state :status :lost :phase :game-over)
+        ;; Multiplayer: auto-yield
+        (let [result (yield state)]
+          (if (:error result)
+            (assoc state :status :lost :phase :game-over)
+            (assoc result :auto-yielded true)))))
     state))
