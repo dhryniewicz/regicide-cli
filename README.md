@@ -15,8 +15,11 @@ An unofficial, fan-made CLI implementation of the cooperative card game [Regicid
 # Start a solo game
 clj -M:run
 
-# Start with 2-4 players (pass player count as argument)
+# Start with 2-4 players (hot-seat, same terminal)
 clj -M:run 2
+
+# Start online multiplayer
+clj -M:online
 
 # Run tests
 clj -M:test
@@ -68,11 +71,28 @@ Each suit has a special power that activates when you play a card of that suit:
 
 If your damage equals the enemy's remaining health exactly, the defeated enemy card is placed on top of the draw pile instead of the discard pile, making it the next card you'll draw.
 
-### Multiplayer (Hot-Seat)
+### Online Multiplayer
+
+Run `clj -M:online` to create or join a game. No configuration needed — just share the lobby code with your friends.
+
+- Create a 2-4 player lobby and share the 6-character code
+- Other players join with the code from their own terminal
+- Game starts automatically when all players have joined
+- If a player quits or disconnects, others are notified
+
+Game logic runs server-side (Firebase Cloud Functions) so no player can see hidden information or cheat.
+
+### Hot-Seat Multiplayer
 
 Run with `clj -M:run 2` (or 3, 4). Players take turns on the same terminal — the screen clears between turns.
 
+### Multiplayer Rules
+
 **Yield**: Press `y` to pass your turn to the next player. You cannot yield if all other players have already yielded.
+
+**Diamonds**: The diamond draw value is distributed across all players starting with the current player, each capped at their hand limit.
+
+**Kill bonus**: The player who defeats an enemy starts the next fight.
 
 **Jesters**: Set aside at game start (2p: 0, 3p: 1, 4p: 2). In multiplayer, playing a jester cancels the enemy's suit immunity, skips their attack, and lets you choose who goes next.
 
