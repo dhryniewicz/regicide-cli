@@ -82,7 +82,7 @@
       (loop []
         (if (.await latch 500 TimeUnit/MILLISECONDS)
           (do (remove-listener) @game-id)
-          (if (and (.ready System/in) (= \q (char (.read System/in))))
+          (if (and (pos? (.available System/in)) (= \q (char (.read System/in))))
             (do (remove-listener) nil)
             (recur)))))))
 
