@@ -155,7 +155,6 @@
             (:escape :down) (recur cursor selected)
             (cond
               (= key \p) :sort
-              (= key \j) :jester
               (and (= key \y) (= phase :play-cards)) :yield
               (= key \q) (if (confirm-quit?) :quit (recur cursor selected))
               (or (= key \h) (= key \?)) :help
@@ -235,26 +234,9 @@
         (= :play-cards phase)
         (let [hand-cards (game/current-hand state)]
           (if (empty? hand-cards)
-            (if (pos? (:jesters state))
-              ;; Empty hand, has jester — wait for j or q
-              (let [action (do (print term/clear-screen)
-                               (println (display/render-game-state state))
-                               (println "\n  No cards in hand! Press j to use a jester, or q to quit.")
-                               (flush)
-                               (loop []
-                                 (let [key (term/read-key)]
-                                   (cond
-                                     (= key \j) :jester
-                                     (= key \q) (if (confirm-quit?) :quit (recur))
-                                     :else (recur)))))]
-                (when (= :jester action)
-                  (send-game-action! game-id uid {:type "use-jester"})
-                  (Thread/sleep 500))
-                (when-not (= :quit action)
-                  (recur sort-order version)))
-              ;; Empty hand, no jester — auto-yield handled server-side
-              (do (Thread/sleep 500)
-                  (recur sort-order version)))
+            ;; Empty hand — auto-yield handled server-side
+            (do (Thread/sleep 500)
+                (recur sort-order version))
             ;; Has cards — normal card selection
             (let [result (card-select-loop state :play-cards)]
               (cond
@@ -263,13 +245,6 @@
                 (= :sort result) (recur (sort-cycle sort-order) version)
                 (= :yield result)
                 (do (send-game-action! game-id uid {:type "yield"})
-                    (Thread/sleep 500)
-                    ;; Check for errors
-                    (when-let [err (client/read-error game-id uid)]
-                      (show-error! state err))
-                    (recur sort-order version))
-                (= :jester result)
-                (do (send-game-action! game-id uid {:type "play-jester"})
                     (Thread/sleep 500)
                     (when-let [err (client/read-error game-id uid)]
                       (show-error! state err))
@@ -294,12 +269,6 @@
             (nil? result) nil
             (= :quit result) nil
             (= :sort result) (recur (sort-cycle sort-order) version)
-            (= :jester result)
-            (do (send-game-action! game-id uid {:type "use-jester"})
-                (Thread/sleep 500)
-                (when-let [err (client/read-error game-id uid)]
-                  (show-error! state err))
-                (recur sort-order version))
             (= :help result)
             (do (print term/clear-screen)
                 (println (display/render-help))
