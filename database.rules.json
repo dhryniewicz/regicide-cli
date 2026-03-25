@@ -1,0 +1,46 @@
+{
+  "rules": {
+    "games": {
+      "$gameId": {
+        "meta": {
+          ".read": "root.child('games/'+$gameId+'/meta/playerUids/'+auth.uid).exists()",
+          ".write": false
+        },
+        "public": {
+          ".read": "root.child('games/'+$gameId+'/meta/playerUids/'+auth.uid).exists()",
+          ".write": false
+        },
+        "private": {
+          ".read": false,
+          ".write": false
+        },
+        "hands": {
+          "$uid": {
+            ".read": "auth != null && auth.uid === $uid && root.child('games/'+$gameId+'/meta/playerUids/'+auth.uid).exists()",
+            ".write": false
+          }
+        },
+        "actions": {
+          "$actionId": {
+            ".read": false,
+            ".write": "auth != null && root.child('games/'+$gameId+'/meta/playerUids/'+auth.uid).exists() && newData.hasChildren(['type', 'uid', 'version']) && newData.child('uid').val() === auth.uid",
+            ".validate": "newData.child('type').isString() && newData.child('uid').isString() && newData.child('version').isNumber()"
+          }
+        },
+        "errors": {
+          "$uid": {
+            ".read": "auth != null && auth.uid === $uid",
+            ".write": false
+          }
+        }
+      }
+    },
+    "lobbies": {
+      ".read": "auth != null",
+      "$lobbyId": {
+        ".write": "auth != null",
+        ".validate": "newData.hasChildren(['host', 'numPlayers', 'status'])"
+      }
+    }
+  }
+}

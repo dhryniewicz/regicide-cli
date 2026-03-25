@@ -109,15 +109,32 @@
             exact-kill (enemy/exact-kill? current-enemy damage)
             state (update state :current-enemy enemy/apply-damage damage)
 
-            ;; 5. Apply Diamonds: draw cards into current player's hand (capped at hand limit)
-            state (let [hand-limit (hand-sizes (:num-players state))
-                        current-count (count (current-hand state))
-                        room (max 0 (- hand-limit current-count))
-                        draw-count (min (:diamonds-draw effects) (count (:tavern-deck state)) room)
-                        [drawn remaining] (deck/draw (:tavern-deck state) draw-count)]
-                    (-> state
-                        (assoc :tavern-deck remaining)
-                        (update-current-hand into drawn)))
+            ;; 5. Apply Diamonds: distribute draws across all players starting
+            ;;    with current player, total draws = diamond value, each player
+            ;;    capped at hand limit
+            state (if (zero? (:diamonds-draw effects))
+                    state
+                    (let [hand-limit (hand-sizes (:num-players state))
+                          n          (:num-players state)
+                          cur        (:current-player state)
+                          draw-order (mapv #(mod (+ cur %) n) (range n))]
+                      (first
+                        (reduce
+                          (fn [[st remaining-draws] player-idx]
+                            (if (zero? remaining-draws)
+                              [st 0]
+                              (let [hand (get-in st [:players player-idx :hand])
+                                    room (max 0 (- hand-limit (count hand)))
+                                    draw-count (min room remaining-draws (count (:tavern-deck st)))]
+                                (if (zero? draw-count)
+                                  [st remaining-draws]
+                                  (let [[drawn remaining] (deck/draw (:tavern-deck st) draw-count)]
+                                    [(-> st
+                                         (assoc :tavern-deck remaining)
+                                         (update-in [:players player-idx :hand] into drawn))
+                                     (- remaining-draws draw-count)])))))
+                          [state (:diamonds-draw effects)]
+                          draw-order))))
 
             ;; 6. Move played cards to discard
             state (update state :discard-pile into cards)
@@ -131,15 +148,14 @@
                 state (if exact-kill
                         (update state :tavern-deck #(vec (cons defeated-card %)))
                         (update state :discard-pile conj defeated-card))]
-            ;; Flip next enemy or win
+            ;; Flip next enemy or win — killer starts the next fight
             (if (empty? (:castle-deck state))
               (assoc state :phase :game-over :status :won)
               (let [next-enemy-card (first (:castle-deck state))]
                 (-> state
                     (assoc :castle-deck (vec (rest (:castle-deck state))))
                     (assoc :current-enemy (enemy/make-enemy next-enemy-card))
-                    (assoc :phase :play-cards)
-                    advance-player))))
+                    (assoc :phase :play-cards)))))
           ;; Enemy survives - check if attack is 0 (skip damage phase)
           (if (zero? (get-in state [:current-enemy :attack]))
             (-> state

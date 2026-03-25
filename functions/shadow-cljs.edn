@@ -1,0 +1,9 @@
+{:source-paths ["src" "../src"]
+ :dependencies []
+ :builds
+ {:functions
+  {:target    :node-library
+   :output-to "dist/index.js"
+   :exports   {:processAction   regicide.firebase.handler/process-action
+               :createGame      regicide.firebase.handler/create-game
+               :cleanupLobbies  regicide.firebase.handler/cleanup-lobbies}}}}
