@@ -91,7 +91,7 @@
                                                           (game/check-can-survive result)
                                                           result)]
                                         (-> (write-game-state! game-ref final-state player-order new-version)
-                                            (.then #(-> snapshot .-ref .remove)))))))))))))))))))
+                                            (.then #(-> snapshot .-ref .remove))))))))))))))))))))
 
 ;; ---------------------------------------------------------------------------
 ;; createGame: triggered when a lobby has all players ready
