@@ -44,7 +44,7 @@
 
 (defn- write-error!
   "Write an error message to /games/{gameId}/errors/{uid} for the acting player."
-  [game-ref uid error-msg]
+  [^js game-ref uid error-msg]
   (-> game-ref
       (.child (str "errors/" uid))
       (.set #js {:message   error-msg
@@ -55,7 +55,7 @@
    /games/{gameId}/actions/{actionId}. Validates and applies the action."
   (-> (.. functions -database (ref "games/{gameId}/actions/{actionId}"))
       (.onCreate
-        (fn [snapshot context]
+        (fn [^js snapshot ^js context]
           (let [action     (.val snapshot)
                 game-id    (.. context -params -gameId)
                 action-id  (.. context -params -actionId)
@@ -63,27 +63,27 @@
             ;; Use a promise chain for async operations
             (-> (.once (.child game-ref "meta") "value")
                 (.then
-                  (fn [meta-snap]
-                    (let [meta-data  (.val meta-snap)
+                  (fn [^js meta-snap]
+                    (let [^js meta-data (.val meta-snap)
                           version    (.-version meta-data)
                           player-order (vec (js->clj (.-playerOrder meta-data)))]
                       ;; Read full state
                       (-> (.once (.child game-ref "private/fullState") "value")
                           (.then
-                            (fn [state-snap]
+                            (fn [^js state-snap]
                               (let [full-state (state/deserialize-state (.val state-snap))
                                     ;; Validate the action
                                     error (actions/validate-action action full-state player-order version)]
                                 (if error
                                   ;; Validation failed — write error, delete action
-                                  (-> (write-error! game-ref (.-uid action) error)
-                                      (.then #(-> snapshot .-ref .remove)))
+                                  (-> (write-error! game-ref (.-uid ^js action) error)
+                                      (.then #(-> ^js snapshot .-ref .remove)))
                                   ;; Validation passed — apply the action
                                   (let [result (actions/apply-action full-state action)]
                                     (if (:error result)
                                       ;; Game logic rejected the action
-                                      (-> (write-error! game-ref (.-uid action) (:error result))
-                                          (.then #(-> snapshot .-ref .remove)))
+                                      (-> (write-error! game-ref (.-uid ^js action) (:error result))
+                                          (.then #(-> ^js snapshot .-ref .remove)))
                                       ;; Success — write new state
                                       (let [new-version (inc version)
                                             ;; Run check-can-survive if entering suffer-damage
@@ -91,7 +91,7 @@
                                                           (game/check-can-survive result)
                                                           result)]
                                         (-> (write-game-state! game-ref final-state player-order new-version)
-                                            (.then #(-> snapshot .-ref .remove))))))))))))))))))))
+                                            (.then #(-> ^js snapshot .-ref .remove))))))))))))))))))))
 
 ;; ---------------------------------------------------------------------------
 ;; createGame: triggered when a lobby has all players ready
@@ -102,15 +102,15 @@
    If all players are ready, creates a new game and updates the lobby."
   (-> (.. functions -database (ref "lobbies/{lobbyId}"))
       (.onUpdate
-        (fn [change context]
-          (let [lobby-data (.val (.-after change))
+        (fn [^js change ^js context]
+          (let [^js lobby-data (.val (.-after change))
                 lobby-id   (.. context -params -lobbyId)
                 status     (.-status lobby-data)]
             ;; Only process if lobby is in 'waiting' state and all players ready
             (if (and (= "waiting" status)
                      (lobby/all-players-ready? lobby-data))
               ;; Create the game
-              (let [players-js  (.-players lobby-data)
+              (let [players-js  (.-players ^js lobby-data)
                     players-clj (js->clj players-js :keywordize-keys false)
                     ;; Collect uids and names in join order
                     player-uids  (vec (keys players-clj))
@@ -150,10 +150,10 @@
                        (.endAt cutoff)
                        "value")
                 (.then
-                  (fn [snapshot]
+                  (fn [^js snapshot]
                     (let [updates #js {}]
                       (.forEach snapshot
-                        (fn [child]
+                        (fn [^js child]
                           (aset updates (.-key child) nil)))
                       (when (pos? (.-numChildren snapshot))
                         (.update lobbies-ref updates)))))))))))

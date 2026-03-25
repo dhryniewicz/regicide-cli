@@ -26,7 +26,7 @@
    2. Action type is valid for the current phase
    3. The action's uid matches the current player
    4. The action's version matches the current version (anti-replay)"
-  [action state player-order version]
+  [^js action state player-order version]
   (let [action-type (.-type action)
         action-uid  (.-uid action)
         action-ver  (.-version action)
@@ -79,7 +79,7 @@
    - use-jester:         {}
    - play-jester:        {}
    - choose-next-player: {playerIndex: 1}"
-  [state action]
+  [state ^js action]
   (let [action-type (.-type action)]
     (case action-type
       "play-cards"

@@ -6,7 +6,7 @@
 
 (defn all-players-ready?
   "Check if all players in the lobby are ready and the lobby has enough players."
-  [lobby-data]
+  [^js lobby-data]
   (let [num-players (.-numPlayers lobby-data)
         players     (js->clj (.-players lobby-data) :keywordize-keys false)
         player-list (vals players)]
