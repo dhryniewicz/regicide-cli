@@ -90,13 +90,20 @@
 ;; ---------------------------------------------------------------------------
 
 (defn- send-game-action!
-  "Send an action to Firebase with the latest version.
-   Re-reads the version right before sending to minimize race conditions."
+  "Send an action to Firebase with the latest version, then wait for
+   the Cloud Function to process it (version increment) before returning."
   [game-id uid action-map]
   (let [meta (client/read-meta game-id)
         version (:version meta)
         full-action (merge {:uid uid :version version} action-map)]
-    (client/send-action! game-id full-action)))
+    (client/send-action! game-id full-action)
+    ;; Wait until the server processes the action (version increments)
+    (loop [attempts 0]
+      (Thread/sleep 300)
+      (let [new-meta (client/read-meta game-id)
+            new-version (:version new-meta)]
+        (when (and (= new-version version) (< attempts 20))
+          (recur (inc attempts)))))))
 
 ;; ---------------------------------------------------------------------------
 ;; Card selection (reused from CLI)
@@ -245,7 +252,6 @@
                 (= :sort result) (recur (sort-cycle sort-order) version)
                 (= :yield result)
                 (do (send-game-action! game-id uid {:type "yield"})
-                    (Thread/sleep 500)
                     (when-let [err (client/read-error game-id uid)]
                       (show-error! state err))
                     (recur sort-order version))
@@ -257,7 +263,6 @@
                 :else
                 (do (send-game-action! game-id uid
                       {:type "play-cards" :cardIndices result})
-                    (Thread/sleep 500)
                     (when-let [err (client/read-error game-id uid)]
                       (show-error! state err))
                     (recur sort-order version))))))
@@ -277,7 +282,6 @@
             :else
             (do (send-game-action! game-id uid
                   {:type "suffer-damage" :cardIndices result})
-                (Thread/sleep 500)
                 (when-let [err (client/read-error game-id uid)]
                   (show-error! state err))
                 (recur sort-order version))))
@@ -287,7 +291,6 @@
         (let [idx (player-chooser-loop! state)]
           (send-game-action! game-id uid
             {:type "choose-next-player" :playerIndex idx})
-          (Thread/sleep 500)
           (when-let [err (client/read-error game-id uid)]
             (show-error! state err))
           (recur sort-order version))
