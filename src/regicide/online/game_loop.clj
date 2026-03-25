@@ -220,20 +220,22 @@
         (let [hand-cards (game/current-hand state)]
           (if (empty? hand-cards)
             (if (pos? (:jesters state))
-              ;; Empty hand, has jester
-              (do (print term/clear-screen)
-                  (println (display/render-game-state state))
-                  (println "\n  No cards in hand! Press j to use a jester, or q to quit.")
-                  (flush)
-                  (loop []
-                    (let [key (term/read-key)]
-                      (cond
-                        (= key \j) (do (send-game-action! game-id uid version
-                                         {:type "use-jester"})
-                                       (Thread/sleep 500)
-                                       (recur sort-order version))
-                        (= key \q) (when-not (confirm-quit?) (recur))
-                        :else (recur)))))
+              ;; Empty hand, has jester — wait for j or q
+              (let [action (do (print term/clear-screen)
+                               (println (display/render-game-state state))
+                               (println "\n  No cards in hand! Press j to use a jester, or q to quit.")
+                               (flush)
+                               (loop []
+                                 (let [key (term/read-key)]
+                                   (cond
+                                     (= key \j) :jester
+                                     (= key \q) (if (confirm-quit?) :quit (recur))
+                                     :else (recur)))))]
+                (when (= :jester action)
+                  (send-game-action! game-id uid version {:type "use-jester"})
+                  (Thread/sleep 500))
+                (when-not (= :quit action)
+                  (recur sort-order version)))
               ;; Empty hand, no jester — auto-yield handled server-side
               (do (Thread/sleep 500)
                   (recur sort-order version)))
