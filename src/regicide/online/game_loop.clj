@@ -156,7 +156,7 @@
   (println (display/render-game-state state selector-state))
   (when action-info
     (println (display/render-action-result action-info)))
-  (println (display/render-selector-prompt phase true))
+  (println (display/render-selector-prompt phase true false))
   (flush))
 
 (defn- confirm-quit? []

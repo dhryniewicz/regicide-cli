@@ -248,13 +248,15 @@
           selection-preview
           ""])))))
 
-(defn render-selector-prompt [phase multiplayer?]
-  (let [base (str "\u2190\u2192 move  \u2191 select  Enter "
-                  (case phase :play-cards "play" :suffer-damage "discard" "?"))
-        yield-part (when (and multiplayer? (= phase :play-cards)) "  y yield")
-        jester-part "  j jester"
-        rest-part "  p sort  h help  q quit"]
-    (str base (or yield-part "") jester-part rest-part)))
+(defn render-selector-prompt
+  ([phase multiplayer?] (render-selector-prompt phase multiplayer? true))
+  ([phase multiplayer? show-jester?]
+   (let [base (str "\u2190\u2192 move  \u2191 select  Enter "
+                   (case phase :play-cards "play" :suffer-damage "discard" "?"))
+         yield-part (when (and multiplayer? (= phase :play-cards)) "  y yield")
+         jester-part (when show-jester? "  j jester")
+         rest-part "  p sort  h help  q quit"]
+     (str base (or yield-part "") (or jester-part "") rest-part))))
 
 (defn render-help []
   (str/join "\n"
