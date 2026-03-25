@@ -1,11 +1,7 @@
 (ns regicide.online.auth
-  "Firebase Anonymous Authentication for CLI client.
-   Persists credentials to ~/.regicide/auth.edn for reuse across sessions."
-  (:require [clojure.edn :as edn]
-            [clojure.java.io :as io])
-  (:import [com.google.firebase FirebaseApp FirebaseOptions]
-           [com.google.firebase.auth FirebaseAuth]
-           [java.io File]))
+  "Persists credentials to ~/.regicide/auth.edn for reuse across sessions."
+  (:require [clojure.edn :as edn])
+  (:import [java.io File]))
 
 (def ^:private config-dir
   (str (System/getProperty "user.home") "/.regicide"))

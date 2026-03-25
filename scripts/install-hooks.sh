@@ -19,7 +19,7 @@ python3 "$ROOT/scripts/check-syntax.py"
 echo ""
 echo "=== Compiling Clojure (online client) ==="
 cd "$ROOT"
-OUTPUT=$(clj -M:online -e "(require 'regicide.online.game-loop 'regicide.online.lobby 'regicide.online.client 'regicide.online.auth)" 2>&1 || true)
+OUTPUT=$(clj -M:compile-online -e "(require 'regicide.online.game-loop 'regicide.online.lobby 'regicide.online.client 'regicide.online.auth)" 2>&1 || true)
 if echo "$OUTPUT" | grep -qi "error\|exception"; then
   echo "$OUTPUT"
   echo "Compilation failed."
