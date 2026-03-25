@@ -7,7 +7,7 @@ HOOK="$ROOT/.git/hooks/pre-push"
 
 cat > "$HOOK" << 'HOOKEOF'
 #!/bin/sh
-# Pre-push hook: verify syntax, build Cloud Functions, and run tests.
+# Pre-push hook: verify syntax, compile all code, build Cloud Functions, and run tests.
 
 set -e
 
@@ -15,6 +15,17 @@ ROOT="$(git rev-parse --show-toplevel)"
 
 echo "=== Checking syntax (delimiter balancing) ==="
 python3 "$ROOT/scripts/check-syntax.py"
+
+echo ""
+echo "=== Compiling Clojure (online client) ==="
+cd "$ROOT"
+OUTPUT=$(clj -M:online -e "(require 'regicide.online.game-loop 'regicide.online.lobby 'regicide.online.client 'regicide.online.auth)" 2>&1 || true)
+if echo "$OUTPUT" | grep -qi "error\|exception"; then
+  echo "$OUTPUT"
+  echo "Compilation failed."
+  exit 1
+fi
+echo "  OK"
 
 echo ""
 echo "=== Building Cloud Functions ==="

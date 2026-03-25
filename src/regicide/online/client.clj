@@ -38,7 +38,7 @@
   []
   @db)
 
-(defn ref
+(defn db-ref
   "Get a DatabaseReference for the given path."
   [path]
   (.getReference ^FirebaseDatabase @db ^String path))
@@ -54,7 +54,7 @@
         error  (atom nil)
         latch  (CountDownLatch. 1)]
     (.addListenerForSingleValueEvent
-      (ref path)
+      (db-ref path)
       (reify ValueEventListener
         (onDataChange [_ snapshot]
           (reset! result (.getValue ^DataSnapshot snapshot))
@@ -75,7 +75,7 @@
   "Attach a value listener to a path. Calls (callback value) on each update.
    Returns a function that removes the listener when called."
   [path callback]
-  (let [db-ref (ref path)
+  (let [db-ref (db-ref path)
         listener (reify ValueEventListener
                    (onDataChange [_ snapshot]
                      (callback (.getValue ^DataSnapshot snapshot)))
@@ -93,7 +93,7 @@
   [path value]
   (let [latch (CountDownLatch. 1)
         error (atom nil)]
-    (.setValue (ref path) value
+    (.setValue (db-ref path) value
       (reify com.google.firebase.database.DatabaseReference$CompletionListener
         (onComplete [_ db-error _ref]
           (when db-error
@@ -106,7 +106,7 @@
 (defn push!
   "Push a new child under the given path. Returns the generated key."
   [path value]
-  (let [new-ref (.push (ref path))
+  (let [new-ref (.push (db-ref path))
         key     (.getKey new-ref)
         latch   (CountDownLatch. 1)
         error   (atom nil)]
