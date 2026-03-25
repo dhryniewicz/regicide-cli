@@ -148,15 +148,14 @@
                 state (if exact-kill
                         (update state :tavern-deck #(vec (cons defeated-card %)))
                         (update state :discard-pile conj defeated-card))]
-            ;; Flip next enemy or win
+            ;; Flip next enemy or win — killer starts the next fight
             (if (empty? (:castle-deck state))
               (assoc state :phase :game-over :status :won)
               (let [next-enemy-card (first (:castle-deck state))]
                 (-> state
                     (assoc :castle-deck (vec (rest (:castle-deck state))))
                     (assoc :current-enemy (enemy/make-enemy next-enemy-card))
-                    (assoc :phase :play-cards)
-                    advance-player))))
+                    (assoc :phase :play-cards)))))
           ;; Enemy survives - check if attack is 0 (skip damage phase)
           (if (zero? (get-in state [:current-enemy :attack]))
             (-> state
