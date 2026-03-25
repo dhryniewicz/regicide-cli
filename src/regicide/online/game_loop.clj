@@ -62,7 +62,9 @@
      :tavern-deck     (vec (repeat (:tavernDeckCount public-data) nil))
      :discard-pile    (vec (repeat (:discardPileCount public-data) nil))
      :players         players
-     :current-player  (:currentPlayer public-data)
+     ;; Display uses current-player to decide whose hand to render as main.
+     ;; In online mode, always show our own hand as the main hand.
+     :current-player  my-player-index
      :current-enemy   (reconstruct-enemy (:currentEnemy public-data))
      :phase           (keyword (:phase public-data))
      :status          (keyword (:status public-data))
@@ -265,9 +267,10 @@
     (let [{:keys [public hand meta]} (poll-state! game-id uid)
           version     (:version meta)
           my-idx      (my-player-index meta uid)
+          active-idx  (:currentPlayer public)
           state       (-> (build-display-state public hand my-idx)
                           (assoc :sort-order sort-order))
-          my-turn?    (= my-idx (:current-player state))
+          my-turn?    (= my-idx active-idx)
           phase       (:phase state)
           my-name     (player-name meta my-idx)
           my-label    (case phase
