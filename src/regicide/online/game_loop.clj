@@ -92,15 +92,14 @@
       (get names (keyword uid) (str "Player " (inc idx)))
       (str "Player " (inc idx)))))
 
-(def ^:private spinner-frames ["|" "/" "-" "\\"])
-
 ;; ---------------------------------------------------------------------------
 ;; Waiting screen
 ;; ---------------------------------------------------------------------------
 
 (defn- render-waiting-screen
-  "Show a waiting screen when it's another player's turn."
-  [state meta-data spin-idx]
+  "Show a waiting screen when it's another player's turn.
+   Only redraws when the version changes to avoid flicker."
+  [state meta-data]
   (let [current-idx (:current-player state)
         name (player-name meta-data current-idx)
         phase (:phase state)
@@ -108,12 +107,11 @@
                       :play-cards "attacking"
                       :suffer-damage "defending"
                       :choose-next-player "choosing next player"
-                      "thinking")
-        spinner (nth spinner-frames (mod spin-idx (count spinner-frames)))]
+                      "thinking")]
     (print term/clear-screen)
     (println (display/render-game-state state))
-    (println (str "\n  " dim spinner " " term/bold cyan name ansi-reset
-                  dim " is " phase-label "..." ansi-reset))
+    (println (str "\n  " dim "Waiting for " term/bold cyan name ansi-reset
+                  dim " (" phase-label ")..." ansi-reset))
     (flush)))
 
 ;; ---------------------------------------------------------------------------
@@ -241,14 +239,29 @@
   (let [order (:playerOrder meta-data)]
     (first (keep-indexed (fn [i u] (when (= u uid) i)) order))))
 
+(defn- cancel-game!
+  "Mark the game as canceled so other players are notified."
+  [game-id uid meta-data]
+  (let [name (player-name meta-data (my-player-index meta-data uid))]
+    (try
+      (client/write! (str "games/" game-id "/meta/status") "canceled")
+      (client/write! (str "games/" game-id "/meta/canceledBy") name)
+      (catch Exception _))))
+
 (defn run-game-loop!
   "Main online game loop. Polls Firebase for state and handles player turns."
   [game-id uid]
   (println "\n  Game started! Loading...")
   (flush)
+  ;; Register shutdown hook for ungraceful exits (Ctrl+C, terminal close)
+  (let [shutdown-hook (Thread. (fn []
+                                 (try
+                                   (let [meta (client/read-meta game-id)]
+                                     (cancel-game! game-id uid meta))
+                                   (catch Exception _))))]
+    (.addShutdownHook (Runtime/getRuntime) shutdown-hook)
   (loop [sort-order :none
-         prev-version -1
-         spin-idx 0]
+         prev-version -1]
     (let [{:keys [public hand meta]} (poll-state! game-id uid)
           version     (:version meta)
           my-idx      (my-player-index meta uid)
@@ -263,17 +276,32 @@
                         (str "YOUR TURN (" my-name ")"))]
 
       (cond
+        ;; Game canceled by another player
+        (= "canceled" (:status meta))
+        (do (.removeShutdownHook (Runtime/getRuntime) shutdown-hook)
+            (print term/clear-screen)
+            (println (display/render-game-state state))
+            (let [who (:canceledBy meta)]
+              (println (str "\n  " term/bold yellow
+                            "Game canceled" (when who (str " by " who)) "."
+                            ansi-reset))
+              (println "  Press any key...")
+              (flush)
+              (term/read-key)))
+
         ;; Game over
         (or (= :game-over phase) (#{:won :lost} (:status state)))
-        (do (print term/clear-screen)
+        (do (.removeShutdownHook (Runtime/getRuntime) shutdown-hook)
+            (print term/clear-screen)
             (println (display/render-game-state state))
             (println (display/render-game-over state)))
 
         ;; Not my turn — show waiting screen, then poll again
         (not my-turn?)
-        (do (render-waiting-screen state meta spin-idx)
+        (do (when (not= version prev-version)
+              (render-waiting-screen state meta))
             (Thread/sleep 1000)
-            (recur sort-order version (inc spin-idx)))
+            (recur sort-order version))
 
         ;; My turn — play phase
         (= :play-cards phase)
@@ -281,48 +309,52 @@
           (if (empty? hand-cards)
             ;; Empty hand — auto-yield handled server-side
             (do (Thread/sleep 500)
-                (recur sort-order version spin-idx))
+                (recur sort-order version))
             ;; Has cards — normal card selection
             (let [result (card-select-loop state :play-cards my-label)]
               (cond
-                (nil? result) nil
-                (= :quit result) nil
-                (= :sort result) (recur (sort-cycle sort-order) version spin-idx)
+                (nil? result) (do (cancel-game! game-id uid meta)
+                                  (.removeShutdownHook (Runtime/getRuntime) shutdown-hook))
+                (= :quit result) (do (cancel-game! game-id uid meta)
+                                     (.removeShutdownHook (Runtime/getRuntime) shutdown-hook))
+                (= :sort result) (recur (sort-cycle sort-order) version)
                 (= :yield result)
                 (do (send-game-action! game-id uid {:type "yield"})
                     (when-let [err (client/read-error game-id uid)]
                       (show-error! state err))
-                    (recur sort-order version spin-idx))
+                    (recur sort-order version))
                 (= :help result)
                 (do (print term/clear-screen)
                     (println (display/render-help))
                     (term/read-key)
-                    (recur sort-order version spin-idx))
+                    (recur sort-order version))
                 :else
                 (do (send-game-action! game-id uid
                       {:type "play-cards" :cardIndices result})
                     (when-let [err (client/read-error game-id uid)]
                       (show-error! state err))
-                    (recur sort-order version spin-idx))))))
+                    (recur sort-order version))))))
 
         ;; My turn — suffer damage
         (= :suffer-damage phase)
         (let [result (card-select-loop state :suffer-damage my-label)]
           (cond
-            (nil? result) nil
-            (= :quit result) nil
-            (= :sort result) (recur (sort-cycle sort-order) version spin-idx)
+            (nil? result) (do (cancel-game! game-id uid meta)
+                              (.removeShutdownHook (Runtime/getRuntime) shutdown-hook))
+            (= :quit result) (do (cancel-game! game-id uid meta)
+                                 (.removeShutdownHook (Runtime/getRuntime) shutdown-hook))
+            (= :sort result) (recur (sort-cycle sort-order) version)
             (= :help result)
             (do (print term/clear-screen)
                 (println (display/render-help))
                 (term/read-key)
-                (recur sort-order version spin-idx))
+                (recur sort-order version))
             :else
             (do (send-game-action! game-id uid
                   {:type "suffer-damage" :cardIndices result})
                 (when-let [err (client/read-error game-id uid)]
                   (show-error! state err))
-                (recur sort-order version spin-idx))))
+                (recur sort-order version))))
 
         ;; My turn — choose next player (after jester)
         (= :choose-next-player phase)
@@ -331,9 +363,9 @@
             {:type "choose-next-player" :playerIndex idx})
           (when-let [err (client/read-error game-id uid)]
             (show-error! state err))
-          (recur sort-order version spin-idx))
+          (recur sort-order version))
 
         ;; Unknown phase — poll again
         :else
         (do (Thread/sleep 1000)
-            (recur sort-order version spin-idx))))))
+            (recur sort-order version)))))))
