@@ -109,15 +109,28 @@
             exact-kill (enemy/exact-kill? current-enemy damage)
             state (update state :current-enemy enemy/apply-damage damage)
 
-            ;; 5. Apply Diamonds: draw cards into current player's hand (capped at hand limit)
-            state (let [hand-limit (hand-sizes (:num-players state))
-                        current-count (count (current-hand state))
-                        room (max 0 (- hand-limit current-count))
-                        draw-count (min (:diamonds-draw effects) (count (:tavern-deck state)) room)
-                        [drawn remaining] (deck/draw (:tavern-deck state) draw-count)]
-                    (-> state
-                        (assoc :tavern-deck remaining)
-                        (update-current-hand into drawn)))
+            ;; 5. Apply Diamonds: each player draws up to hand limit,
+            ;;    starting with current player, up to the diamond value total
+            state (if (zero? (:diamonds-draw effects))
+                    state
+                    (let [hand-limit (hand-sizes (:num-players state))
+                          n          (:num-players state)
+                          cur        (:current-player state)
+                          ;; Player indices in turn order starting from current
+                          draw-order (mapv #(mod (+ cur %) n) (range n))]
+                      (reduce
+                        (fn [st player-idx]
+                          (let [hand (get-in st [:players player-idx :hand])
+                                room (max 0 (- hand-limit (count hand)))
+                                draw-count (min room (count (:tavern-deck st)))]
+                            (if (zero? draw-count)
+                              st
+                              (let [[drawn remaining] (deck/draw (:tavern-deck st) draw-count)]
+                                (-> st
+                                    (assoc :tavern-deck remaining)
+                                    (update-in [:players player-idx :hand] into drawn))))))
+                        state
+                        draw-order)))
 
             ;; 6. Move played cards to discard
             state (update state :discard-pile into cards)
