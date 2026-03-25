@@ -17,6 +17,9 @@
 
 (def db (.database admin))
 
+(def region "europe-west1")
+(def regional-functions (.region functions region))
+
 ;; ---------------------------------------------------------------------------
 ;; processAction: the core game loop Cloud Function
 ;; ---------------------------------------------------------------------------
@@ -53,7 +56,7 @@
 (def process-action
   "Cloud Function triggered when a player writes an action to
    /games/{gameId}/actions/{actionId}. Validates and applies the action."
-  (-> (.. functions -database (ref "games/{gameId}/actions/{actionId}"))
+  (-> (.. regional-functions -database (ref "games/{gameId}/actions/{actionId}"))
       (.onCreate
         (fn [^js snapshot ^js context]
           (let [action     (.val snapshot)
@@ -100,7 +103,7 @@
 (def create-game
   "Cloud Function triggered when a lobby is updated.
    If all players are ready, creates a new game and updates the lobby."
-  (-> (.. functions -database (ref "lobbies/{lobbyId}"))
+  (-> (.. regional-functions -database (ref "lobbies/{lobbyId}"))
       (.onUpdate
         (fn [^js change ^js context]
           (let [^js lobby-data (.val (.-after change))
@@ -141,7 +144,7 @@
 
 (def cleanup-lobbies
   "Scheduled Cloud Function that runs daily to remove lobbies older than 24 hours."
-  (-> (.. functions -pubsub (schedule "every 24 hours"))
+  (-> (.. regional-functions -pubsub (schedule "every 24 hours"))
       (.onRun
         (fn [_context]
           (let [cutoff     (- (.now js/Date) (* 24 60 60 1000))
