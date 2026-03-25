@@ -28,16 +28,29 @@
    :max-health maxHealth
    :max-attack maxAttack})
 
+(defn- normalize-hand
+  "Firebase RTDB may return a hand as a vector, a map with string-index keys,
+   or nil. Normalize to a vector of card maps."
+  [hand-data]
+  (cond
+    (nil? hand-data)    []
+    (vector? hand-data) (mapv js-card->clj hand-data)
+    (map? hand-data)    (->> hand-data
+                             (sort-by (comp #(Long/parseLong (name %)) key))
+                             (mapv (comp js-card->clj val)))
+    :else               []))
+
 (defn build-display-state
   "Build a state map compatible with cli/display from Firebase public data + player hand.
    The display layer uses this to render the game without modification."
   [public-data my-hand my-player-index]
   (let [hand-sizes (:handSizes public-data)
         num-players (or (:numPlayers public-data) (count hand-sizes))
+        my-cards (normalize-hand my-hand)
         players (vec
                   (for [i (range num-players)]
                     (if (= i my-player-index)
-                      {:hand (mapv js-card->clj my-hand)}
+                      {:hand my-cards}
                       ;; Other players — fake hand with correct count for display
                       (let [size (get hand-sizes (keyword (str i)) 0)]
                         {:hand (vec (repeat size {:suit :spades :rank 0}))}))))]
@@ -77,9 +90,12 @@
 ;; ---------------------------------------------------------------------------
 
 (defn- send-game-action!
-  "Send an action to Firebase and wait for the state to update."
-  [game-id uid version action-map]
-  (let [full-action (merge {:uid uid :version version} action-map)]
+  "Send an action to Firebase with the latest version.
+   Re-reads the version right before sending to minimize race conditions."
+  [game-id uid action-map]
+  (let [meta (client/read-meta game-id)
+        version (:version meta)
+        full-action (merge {:uid uid :version version} action-map)]
     (client/send-action! game-id full-action)))
 
 ;; ---------------------------------------------------------------------------
@@ -232,7 +248,7 @@
                                      (= key \q) (if (confirm-quit?) :quit (recur))
                                      :else (recur)))))]
                 (when (= :jester action)
-                  (send-game-action! game-id uid version {:type "use-jester"})
+                  (send-game-action! game-id uid {:type "use-jester"})
                   (Thread/sleep 500))
                 (when-not (= :quit action)
                   (recur sort-order version)))
@@ -246,14 +262,14 @@
                 (= :quit result) nil
                 (= :sort result) (recur (sort-cycle sort-order) version)
                 (= :yield result)
-                (do (send-game-action! game-id uid version {:type "yield"})
+                (do (send-game-action! game-id uid {:type "yield"})
                     (Thread/sleep 500)
                     ;; Check for errors
                     (when-let [err (client/read-error game-id uid)]
                       (show-error! state err))
                     (recur sort-order version))
                 (= :jester result)
-                (do (send-game-action! game-id uid version {:type "play-jester"})
+                (do (send-game-action! game-id uid {:type "play-jester"})
                     (Thread/sleep 500)
                     (when-let [err (client/read-error game-id uid)]
                       (show-error! state err))
@@ -264,7 +280,7 @@
                     (term/read-key)
                     (recur sort-order version))
                 :else
-                (do (send-game-action! game-id uid version
+                (do (send-game-action! game-id uid
                       {:type "play-cards" :cardIndices result})
                     (Thread/sleep 500)
                     (when-let [err (client/read-error game-id uid)]
@@ -279,7 +295,7 @@
             (= :quit result) nil
             (= :sort result) (recur (sort-cycle sort-order) version)
             (= :jester result)
-            (do (send-game-action! game-id uid version {:type "use-jester"})
+            (do (send-game-action! game-id uid {:type "use-jester"})
                 (Thread/sleep 500)
                 (when-let [err (client/read-error game-id uid)]
                   (show-error! state err))
@@ -290,7 +306,7 @@
                 (term/read-key)
                 (recur sort-order version))
             :else
-            (do (send-game-action! game-id uid version
+            (do (send-game-action! game-id uid
                   {:type "suffer-damage" :cardIndices result})
                 (Thread/sleep 500)
                 (when-let [err (client/read-error game-id uid)]
@@ -300,7 +316,7 @@
         ;; My turn — choose next player (after jester)
         (= :choose-next-player phase)
         (let [idx (player-chooser-loop! state)]
-          (send-game-action! game-id uid version
+          (send-game-action! game-id uid
             {:type "choose-next-player" :playerIndex idx})
           (Thread/sleep 500)
           (when-let [err (client/read-error game-id uid)]
