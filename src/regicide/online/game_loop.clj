@@ -263,7 +263,8 @@
                                    (catch Exception _))))]
     (.addShutdownHook (Runtime/getRuntime) shutdown-hook)
   (loop [sort-order :none
-         prev-version -1]
+         prev-version -1
+         prev-enemy-rank nil]
     (let [{:keys [public hand meta]} (poll-state! game-id uid)
           version     (:version meta)
           my-idx      (my-player-index meta uid)
@@ -272,6 +273,8 @@
                           (assoc :sort-order sort-order))
           my-turn?    (= my-idx active-idx)
           phase       (:phase state)
+          cur-enemy   (:current-enemy state)
+          cur-rank    (:rank (:card cur-enemy))
           my-name     (player-name meta my-idx)
           my-label    (case phase
                         :play-cards    (str "YOUR TURN (" my-name ") - Attack!")
@@ -297,14 +300,30 @@
         (do (.removeShutdownHook (Runtime/getRuntime) shutdown-hook)
             (print term/clear-screen)
             (println (display/render-game-state state))
-            (println (display/render-game-over state)))
+            (println (display/render-game-over state))
+            (println "  Press any key...")
+            (flush)
+            (term/read-key))
+
+        ;; Enemy defeated — show interstitial before continuing
+        (and prev-enemy-rank (not= prev-enemy-rank cur-rank))
+        (let [enemies-left (inc (count (:castle-deck state)))]
+          (print term/clear-screen)
+          (println (str "\n  " term/bold green "=== ENEMY DEFEATED ===" ansi-reset))
+          (println (str "\n  Enemies remaining: " enemies-left))
+          (println (str "\n  Next enemy:"))
+          (println (display/render-enemy cur-enemy))
+          (println "\n  Press any key to continue...")
+          (flush)
+          (term/read-key)
+          (recur sort-order version cur-rank))
 
         ;; Not my turn — show waiting screen, then poll again
         (not my-turn?)
         (do (when (not= version prev-version)
               (render-waiting-screen state meta))
             (Thread/sleep 1000)
-            (recur sort-order version))
+            (recur sort-order version cur-rank))
 
         ;; My turn — play phase
         (= :play-cards phase)
@@ -312,7 +331,7 @@
           (if (empty? hand-cards)
             ;; Empty hand — auto-yield handled server-side
             (do (Thread/sleep 500)
-                (recur sort-order version))
+                (recur sort-order version cur-rank))
             ;; Has cards — normal card selection
             (let [result (card-select-loop state :play-cards my-label)]
               (cond
@@ -320,23 +339,23 @@
                                   (.removeShutdownHook (Runtime/getRuntime) shutdown-hook))
                 (= :quit result) (do (cancel-game! game-id uid meta)
                                      (.removeShutdownHook (Runtime/getRuntime) shutdown-hook))
-                (= :sort result) (recur (sort-cycle sort-order) version)
+                (= :sort result) (recur (sort-cycle sort-order) version cur-rank)
                 (= :yield result)
                 (do (send-game-action! game-id uid {:type "yield"})
                     (when-let [err (client/read-error game-id uid)]
                       (show-error! state err))
-                    (recur sort-order version))
+                    (recur sort-order version cur-rank))
                 (= :help result)
                 (do (print term/clear-screen)
                     (println (display/render-help))
                     (term/read-key)
-                    (recur sort-order version))
+                    (recur sort-order version cur-rank))
                 :else
                 (do (send-game-action! game-id uid
                       {:type "play-cards" :cardIndices result})
                     (when-let [err (client/read-error game-id uid)]
                       (show-error! state err))
-                    (recur sort-order version))))))
+                    (recur sort-order version cur-rank))))))
 
         ;; My turn — suffer damage
         (= :suffer-damage phase)
@@ -346,18 +365,18 @@
                               (.removeShutdownHook (Runtime/getRuntime) shutdown-hook))
             (= :quit result) (do (cancel-game! game-id uid meta)
                                  (.removeShutdownHook (Runtime/getRuntime) shutdown-hook))
-            (= :sort result) (recur (sort-cycle sort-order) version)
+            (= :sort result) (recur (sort-cycle sort-order) version cur-rank)
             (= :help result)
             (do (print term/clear-screen)
                 (println (display/render-help))
                 (term/read-key)
-                (recur sort-order version))
+                (recur sort-order version cur-rank))
             :else
             (do (send-game-action! game-id uid
                   {:type "suffer-damage" :cardIndices result})
                 (when-let [err (client/read-error game-id uid)]
                   (show-error! state err))
-                (recur sort-order version))))
+                (recur sort-order version cur-rank))))
 
         ;; My turn — choose next player (after jester)
         (= :choose-next-player phase)
@@ -366,9 +385,9 @@
             {:type "choose-next-player" :playerIndex idx})
           (when-let [err (client/read-error game-id uid)]
             (show-error! state err))
-          (recur sort-order version))
+          (recur sort-order version cur-rank))
 
         ;; Unknown phase — poll again
         :else
         (do (Thread/sleep 1000)
-            (recur sort-order version)))))))
+            (recur sort-order version cur-rank)))))))
