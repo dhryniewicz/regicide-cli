@@ -52,7 +52,11 @@
                     (if (= i my-player-index)
                       {:hand my-cards}
                       ;; Other players — fake hand with correct count for display
-                      (let [size (get hand-sizes (keyword (str i)) 0)]
+                      ;; handSizes may be a vector [7 5] (Firebase converts
+                      ;; sequential numeric keys to arrays) or a map {:0 7 :1 5}
+                      (let [size (if (vector? hand-sizes)
+                                   (get hand-sizes i 0)
+                                   (get hand-sizes (keyword (str i)) 0))]
                         {:hand (vec (repeat size {:suit :spades :rank 0}))}))))]
     {:castle-deck     (vec (repeat (:castleDeckCount public-data) nil))
      :tavern-deck     (vec (repeat (:tavernDeckCount public-data) nil))
