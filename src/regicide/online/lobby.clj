@@ -123,10 +123,11 @@
           (if (empty? name-str) "Player" name-str))
 
         (= :backspace key)
-        (when (seq chars)
-          (print "\b \b")
-          (flush)
-          (recur (vec (butlast chars))))
+        (if (seq chars)
+          (do (print "\b \b")
+              (flush)
+              (recur (vec (butlast chars))))
+          (recur chars))
 
         (char? key)
         (do (print key)
@@ -148,10 +149,11 @@
             (apply str chars))
 
         (= :backspace key)
-        (when (seq chars)
-          (print "\b \b")
-          (flush)
-          (recur (vec (butlast chars))))
+        (if (seq chars)
+          (do (print "\b \b")
+              (flush)
+              (recur (vec (butlast chars))))
+          (recur chars))
 
         (char? key)
         (do (print key)
