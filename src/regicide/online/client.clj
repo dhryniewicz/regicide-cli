@@ -18,7 +18,7 @@
 
 (def ^:private config
   {:database-url "https://regicide-online-default-rtdb.europe-west1.firebasedatabase.app"
-   :api-key      "AIzaSyDummyKeyReplaceMeWithReal"})
+   :api-key      "AIzaSyBmkdYxvzthlEOS03yEaCzi3J_m6vIZ52I"})
 
 (defonce ^:private http-client
   (delay (HttpClient/newHttpClient)))
