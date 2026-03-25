@@ -131,7 +131,7 @@
                 (doseq [[uid hand-js] (:hands game-data)]
                   (aset game-writes (str "hands/" uid) hand-js))
                 ;; Write game, then update lobby with game ID
-                (-> (.set game-ref game-writes)
+                (-> (.update game-ref game-writes)
                     (.then #(-> (.ref db (str "lobbies/" lobby-id))
                                 (.update #js {:status "started"
                                               :gameId game-id})))))
