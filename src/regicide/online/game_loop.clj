@@ -73,20 +73,47 @@
      :player-changed  false}))
 
 ;; ---------------------------------------------------------------------------
+;; Player name helpers
+;; ---------------------------------------------------------------------------
+
+(def ^:private dim "\u001b[2m")
+(def ^:private green "\u001b[32m")
+(def ^:private yellow "\u001b[33m")
+(def ^:private cyan "\u001b[36m")
+(def ^:private ansi-reset "\u001b[0m")
+
+(defn- player-name
+  "Get a player's display name from meta-data by index."
+  [meta-data idx]
+  (let [player-order (:playerOrder meta-data)
+        uid (nth player-order idx nil)
+        names (:playerNames meta-data)]
+    (if uid
+      (get names (keyword uid) (str "Player " (inc idx)))
+      (str "Player " (inc idx)))))
+
+(def ^:private spinner-frames ["|" "/" "-" "\\"])
+
+;; ---------------------------------------------------------------------------
 ;; Waiting screen
 ;; ---------------------------------------------------------------------------
 
 (defn- render-waiting-screen
   "Show a waiting screen when it's another player's turn."
-  [state meta-data]
+  [state meta-data spin-idx]
   (let [current-idx (:current-player state)
-        player-names (:playerNames meta-data)
-        player-order (:playerOrder meta-data)
-        current-uid (nth player-order current-idx)
-        current-name (get player-names (keyword current-uid) (str "Player " (inc current-idx)))]
+        name (player-name meta-data current-idx)
+        phase (:phase state)
+        phase-label (case phase
+                      :play-cards "attacking"
+                      :suffer-damage "defending"
+                      :choose-next-player "choosing next player"
+                      "thinking")
+        spinner (nth spinner-frames (mod spin-idx (count spinner-frames)))]
     (print term/clear-screen)
     (println (display/render-game-state state))
-    (println (str "\n  Waiting for " current-name "'s turn..."))
+    (println (str "\n  " dim spinner " " term/bold cyan name ansi-reset
+                  dim " is " phase-label "..." ansi-reset))
     (flush)))
 
 ;; ---------------------------------------------------------------------------
@@ -123,8 +150,9 @@
   (flush)
   (term/read-key))
 
-(defn- redraw! [state selector-state action-info phase]
+(defn- redraw! [state selector-state action-info phase player-label]
   (print term/clear-screen)
+  (println (str "\n  " term/bold green ">>> " player-label ansi-reset))
   (println (display/render-game-state state selector-state))
   (when action-info
     (println (display/render-action-result action-info)))
@@ -143,13 +171,13 @@
 
 (defn- card-select-loop
   "Interactive card selection. Returns selected indices as vec, or a keyword command."
-  [state phase]
+  [state phase player-label]
   (let [hand (game/current-hand state)
         hand-size (count hand)]
     (when (pos? hand-size)
       (loop [cursor 0
              selected #{}]
-        (redraw! state {:cursor cursor :selected selected} nil phase)
+        (redraw! state {:cursor cursor :selected selected} nil phase player-label)
         (let [key (term/read-key)]
           (case key
             :left  (recur (mod (dec cursor) hand-size) selected)
@@ -219,14 +247,20 @@
   (println "\n  Game started! Loading...")
   (flush)
   (loop [sort-order :none
-         prev-version -1]
+         prev-version -1
+         spin-idx 0]
     (let [{:keys [public hand meta]} (poll-state! game-id uid)
           version     (:version meta)
           my-idx      (my-player-index meta uid)
           state       (-> (build-display-state public hand my-idx)
                           (assoc :sort-order sort-order))
           my-turn?    (= my-idx (:current-player state))
-          phase       (:phase state)]
+          phase       (:phase state)
+          my-name     (player-name meta my-idx)
+          my-label    (case phase
+                        :play-cards    (str "YOUR TURN (" my-name ") - Attack!")
+                        :suffer-damage (str "YOUR TURN (" my-name ") - Defend!")
+                        (str "YOUR TURN (" my-name ")"))]
 
       (cond
         ;; Game over
@@ -237,9 +271,9 @@
 
         ;; Not my turn — show waiting screen, then poll again
         (not my-turn?)
-        (do (render-waiting-screen state meta)
+        (do (render-waiting-screen state meta spin-idx)
             (Thread/sleep 1000)
-            (recur sort-order version))
+            (recur sort-order version (inc spin-idx)))
 
         ;; My turn — play phase
         (= :play-cards phase)
@@ -247,48 +281,48 @@
           (if (empty? hand-cards)
             ;; Empty hand — auto-yield handled server-side
             (do (Thread/sleep 500)
-                (recur sort-order version))
+                (recur sort-order version spin-idx))
             ;; Has cards — normal card selection
-            (let [result (card-select-loop state :play-cards)]
+            (let [result (card-select-loop state :play-cards my-label)]
               (cond
                 (nil? result) nil
                 (= :quit result) nil
-                (= :sort result) (recur (sort-cycle sort-order) version)
+                (= :sort result) (recur (sort-cycle sort-order) version spin-idx)
                 (= :yield result)
                 (do (send-game-action! game-id uid {:type "yield"})
                     (when-let [err (client/read-error game-id uid)]
                       (show-error! state err))
-                    (recur sort-order version))
+                    (recur sort-order version spin-idx))
                 (= :help result)
                 (do (print term/clear-screen)
                     (println (display/render-help))
                     (term/read-key)
-                    (recur sort-order version))
+                    (recur sort-order version spin-idx))
                 :else
                 (do (send-game-action! game-id uid
                       {:type "play-cards" :cardIndices result})
                     (when-let [err (client/read-error game-id uid)]
                       (show-error! state err))
-                    (recur sort-order version))))))
+                    (recur sort-order version spin-idx))))))
 
         ;; My turn — suffer damage
         (= :suffer-damage phase)
-        (let [result (card-select-loop state :suffer-damage)]
+        (let [result (card-select-loop state :suffer-damage my-label)]
           (cond
             (nil? result) nil
             (= :quit result) nil
-            (= :sort result) (recur (sort-cycle sort-order) version)
+            (= :sort result) (recur (sort-cycle sort-order) version spin-idx)
             (= :help result)
             (do (print term/clear-screen)
                 (println (display/render-help))
                 (term/read-key)
-                (recur sort-order version))
+                (recur sort-order version spin-idx))
             :else
             (do (send-game-action! game-id uid
                   {:type "suffer-damage" :cardIndices result})
                 (when-let [err (client/read-error game-id uid)]
                   (show-error! state err))
-                (recur sort-order version))))
+                (recur sort-order version spin-idx))))
 
         ;; My turn — choose next player (after jester)
         (= :choose-next-player phase)
@@ -297,9 +331,9 @@
             {:type "choose-next-player" :playerIndex idx})
           (when-let [err (client/read-error game-id uid)]
             (show-error! state err))
-          (recur sort-order version))
+          (recur sort-order version spin-idx))
 
         ;; Unknown phase — poll again
         :else
         (do (Thread/sleep 1000)
-            (recur sort-order version))))))
+            (recur sort-order version spin-idx))))))
