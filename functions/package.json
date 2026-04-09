@@ -9,7 +9,7 @@
     "clean": "rm -rf dist"
   },
   "engines": {
-    "node": "20"
+    "node": ">=20"
   },
   "dependencies": {
     "@google-cloud/billing": "^4.0.0",
